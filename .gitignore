@@ -1,0 +1,7 @@
+cdk.context.json
+.env
+cdk.out
+yarn-error.log
+node_modules
+dist
+.idea

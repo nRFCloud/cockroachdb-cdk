@@ -1,30 +1,21 @@
-import { Construct, CustomResource, Duration, Stack } from '@aws-cdk/core';
-import { InstanceClass, InstanceSize, InstanceType, LaunchTemplate, SubnetSelection, Vpc } from '@aws-cdk/aws-ec2';
+import { Construct, CustomResource, Duration } from '@aws-cdk/core';
+import { InstanceClass, InstanceSize, InstanceType, SubnetSelection, Vpc } from '@aws-cdk/aws-ec2';
 import {
   CapacityType,
   Cluster,
-  EndpointAccess, FargateCluster,
+  EndpointAccess,
   KubernetesManifest,
   KubernetesObjectValue,
-  KubernetesVersion, Nodegroup
+  KubernetesVersion,
+  Nodegroup
 } from '@aws-cdk/aws-eks';
 import { default as request } from 'sync-request'
-import {
-  AnyPrincipal,
-  Effect,
-  IRole,
-  ManagedPolicy, Policy,
-  PolicyDocument,
-  PolicyStatement,
-  Role,
-  ServicePrincipal
-} from '@aws-cdk/aws-iam'
+import { AnyPrincipal, Effect, Policy, PolicyStatement, Role } from '@aws-cdk/aws-iam'
 import { load, loadAll } from 'js-yaml'
 import { CfnSecret, ISecret, Secret } from '@aws-cdk/aws-secretsmanager'
 import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs'
 import { Provider } from '@aws-cdk/custom-resources'
 import { join } from 'path';
-import { readFileSync } from 'fs';
 import { Bucket } from '@aws-cdk/aws-s3';
 import { CockroachDbUserCreateProvider } from './cockroachDbUserCreateProvider';
 import { CockroachDbRunSQLProvider } from './cockroachDbRunSQLProvider';
@@ -39,7 +30,7 @@ export class CockroachDBEKSCluster extends Construct {
   private readonly dbInitResource: Construct;
   private readonly rootSecret: Secret;
   private readonly rootCertificatesSecret: ISecret;
-  private readonly options: CockroachClusterConfig;
+  private readonly options: CockroachDBClusterConfig;
   private readonly userCreateProvider: CockroachDbUserCreateProvider;
   private readonly runSQLProvider: CockroachDbRunSQLProvider;
 
@@ -47,8 +38,7 @@ export class CockroachDBEKSCluster extends Construct {
     assumedBy: new AnyPrincipal(),
   });
 
-  private addClusterCapacity(cluster: Cluster, options: CockroachClusterConfig) {
-
+  private addClusterCapacity(cluster: Cluster, options: CockroachDBClusterConfig) {
     const vpc = this.kubeCluster.vpc;
     const perAzCapacity = Math.trunc(options.desiredNodes / vpc.availabilityZones.length);
     const remainder = options.desiredNodes % vpc.availabilityZones.length;
@@ -133,7 +123,6 @@ export class CockroachDBEKSCluster extends Construct {
         capacityType: CapacityType.SPOT,
         minSize: placement.capacity,
         maxSize: placement.capacity * 2,
-        // nodeRole,
         subnets: {
           availabilityZones: [placement.az]
         },
@@ -164,7 +153,7 @@ export class CockroachDBEKSCluster extends Construct {
   }
 
   private addCockroachControlResources(cluster: Cluster) {
-    const cockroachOperatorManifest = loadAll(readFileSync(join(__dirname, '..', 'operator.yaml')).toString())
+    const cockroachOperatorManifest = loadAll(request('GET', COCKROACHDB_OPERATOR_MANIFEST_URL).body.toString())
     const cockroachCRD = load(request('GET', COCKROACHDB_CRD_URL).body.toString());
 
     return this.kubeCluster.addManifest('cockroachdb-control-manifest', cockroachCRD, ...cockroachOperatorManifest);
@@ -195,19 +184,19 @@ export class CockroachDBEKSCluster extends Construct {
     })
   }
 
-  private validateOptions(options: CockroachClusterConfig) {
+  private validateOptions(options: CockroachDBClusterConfig) {
     if (options.desiredNodes <= 3) {
       throw new Error("desiredNodes must be greater than or equal to 3")
     }
   }
 
-  constructor(scope: Construct, id: string, options: CockroachClusterConfig) {
+  constructor(scope: Construct, id: string, options: CockroachDBClusterConfig) {
     super(scope, id);
 
     this.validateOptions(options);
 
     this.options = {
-      ...CockroachClusterDefaults,
+      ...CockroachDBClusterDefaults,
       ...options
     }
 
@@ -422,7 +411,7 @@ with schedule options first_run = 'now';`,
   }
 }
 
-const CockroachClusterDefaults: Omit<CockroachClusterConfig, 'vpc' | 'database' | 'rootUsername'> = {
+const CockroachDBClusterDefaults: Omit<CockroachDBClusterConfig, 'vpc' | 'database' | 'rootUsername'> = {
   kubeEndpointPublic: true,
   desiredNodes: 3,
   instanceTypes: [
@@ -445,7 +434,7 @@ const CockroachClusterDefaults: Omit<CockroachClusterConfig, 'vpc' | 'database' 
   storageRequest: 50,
 }
 
-export interface CockroachClusterConfig {
+export interface CockroachDBClusterConfig {
   vpc: Vpc,
   vpcSubnets?: SubnetSelection[],
   kubeEndpointPublic?: boolean,
@@ -469,7 +458,7 @@ export interface CockroachDBUserSecret {
   port: number;
 }
 
-export interface CockroachRootCertificateSecret {
+export interface CockroachDBRootCertificateSecret {
   caCrt: string;
   rootCrt: string;
   rootKey: string;

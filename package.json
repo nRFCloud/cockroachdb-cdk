@@ -13,7 +13,8 @@
   },
   "name": "cockroach-cdk",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "typings": "dist/index.d.ts",
   "license": "MIT",
   "dependencies": {
     "@aws-cdk/aws-ecs": "^1.134.0",

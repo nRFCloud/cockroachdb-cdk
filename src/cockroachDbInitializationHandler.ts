@@ -1,5 +1,5 @@
 import {SecretsManager} from 'aws-sdk'
-import type { CockroachDBUserSecret, CockroachRootCertificateSecret } from './cockroachDBEKSCluster'
+import type { CockroachDBUserSecret, CockroachDBRootCertificateSecret } from './cockroachDBEKSCluster'
 import {Client} from 'pg'
 
 interface DBInitEvent {
@@ -32,7 +32,7 @@ export async function handler(event: DBInitEvent) {
     SecretId: event.ResourceProperties.rootCertsSecretId
   }).promise();
 
-  const rootCerts: CockroachRootCertificateSecret = JSON.parse(rootCertSecretResponse.SecretString)
+  const rootCerts: CockroachDBRootCertificateSecret = JSON.parse(rootCertSecretResponse.SecretString)
   console.log(`Starting user creation for ${userSecret.username}`)
 
   const client = new Client({
