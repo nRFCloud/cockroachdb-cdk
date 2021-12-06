@@ -1,11 +1,9 @@
 {
   "devDependencies": {
-    "@aws-cdk/aws-ec2": "^1.134.0",
     "@types/js-yaml": "^4.0.4",
     "@types/node": "^16.11.7",
     "@types/pg": "^8.6.1",
-    "cdk8s": "^1.1.31",
-    "cdk8s-plus": "^0.33.0",
+    "aws-cdk": "^1.134.0",
     "typescript": "^4.4.4"
   },
   "files": [
@@ -16,26 +14,27 @@
     "compile": "tsc"
   },
   "name": "cockroach-cdk",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
   "license": "MIT",
   "peerDependencies": {
-    "@aws-cdk/aws-ecs": "^1.134.0",
-    "@aws-cdk/aws-eks": "^1.134.0",
-    "@aws-cdk/aws-iam": "^1.134.0",
-    "@aws-cdk/aws-lambda": "^1.134.0",
-    "@aws-cdk/aws-lambda-nodejs": "^1.134.0",
-    "@aws-cdk/aws-s3": "^1.134.0",
-    "@aws-cdk/aws-secretsmanager": "^1.134.0",
-    "@aws-cdk/aws-ssm": "^1.134.0",
-    "@aws-cdk/core": "^1.134.0",
-    "@aws-cdk/custom-resources": "^1.134.0",
-    "@aws-cdk/lambda-layer-kubectl": "^1.134.0",
-    "aws-cdk": "^1.134.0"
+    "aws-cdk": ">=1.134.0"
   },
   "dependencies": {
-    "esbuild": "^0.13.14",
+    "@aws-cdk/aws-ec2": ">=1.134.0",
+    "@aws-cdk/aws-ecs": ">=1.134.0",
+    "@aws-cdk/aws-eks": ">=1.134.0",
+    "@aws-cdk/aws-iam": ">=1.134.0",
+    "@aws-cdk/aws-lambda": ">=1.134.0",
+    "@aws-cdk/aws-lambda-nodejs": ">=1.134.0",
+    "@aws-cdk/aws-s3": ">=1.134.0",
+    "@aws-cdk/aws-secretsmanager": ">=1.134.0",
+    "@aws-cdk/aws-ssm": ">=1.134.0",
+    "@aws-cdk/core": ">=1.134.0",
+    "@aws-cdk/custom-resources": ">=1.134.0",
+    "@aws-cdk/lambda-layer-kubectl": ">=1.134.0",
+    "esbuild": ">=0.13.14",
     "js-yaml": "^4.1.0",
     "pg": "^8.7.1",
     "sync-request": "^6.1.0"
