@@ -20,7 +20,7 @@
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
   "license": "MIT",
-  "dependencies": {
+  "peerDependencies": {
     "@aws-cdk/aws-ecs": "^1.134.0",
     "@aws-cdk/aws-eks": "^1.134.0",
     "@aws-cdk/aws-iam": "^1.134.0",
@@ -32,7 +32,9 @@
     "@aws-cdk/core": "^1.134.0",
     "@aws-cdk/custom-resources": "^1.134.0",
     "@aws-cdk/lambda-layer-kubectl": "^1.134.0",
-    "aws-cdk": "^1.134.0",
+    "aws-cdk": "^1.134.0"
+  },
+  "dependencies": {
     "esbuild": "^0.13.14",
     "js-yaml": "^4.1.0",
     "pg": "^8.7.1",
