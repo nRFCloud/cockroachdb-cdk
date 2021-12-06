@@ -429,7 +429,7 @@ const CockroachDBClusterDefaults: Omit<CockroachDBClusterConfig, 'vpc' | 'databa
     InstanceType.of(InstanceClass.M5A, InstanceSize.XLARGE),
     InstanceType.of(InstanceClass.M5AD, InstanceSize.XLARGE),
   ],
-  cockroachImage: "cockroachdb/cockroach:v21.2.0",
+  cockroachImage: "cockroachdb/cockroach:v21.2.2",
   publiclyAvailable: false,
   storageRequest: 50,
 }
