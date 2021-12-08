@@ -1,6 +1,7 @@
 import { SecretsManager } from 'aws-sdk';
 import { CockroachDBUserSecret } from './cockroachDBEKSCluster';
-import {Client} from 'pg';
+import { Client, ClientConfig } from 'pg';
+import { Construct } from '@aws-cdk/core';
 
 interface UserCreateEvent {
   RequestType: 'Create' | 'Update' | 'Delete'
@@ -35,11 +36,12 @@ export async function handler(event: UserCreateEvent) {
     port: 26257,
     password: rootSecret.password,
     user: rootSecret.username,
+    options: rootSecret.options,
     database: event.ResourceProperties.database,
     ssl: {
       rejectUnauthorized: false
     }
-  })
+  } as ClientConfig)
 
   await client.connect();
 
@@ -47,7 +49,8 @@ export async function handler(event: UserCreateEvent) {
     case 'Create':
       await client.query(`create user "${userSecret.username}" with password $1;`, [userSecret.password]);
       await client.query(`grant SELECT, UPDATE, DELETE, INSERT, CONNECT on database "${event.ResourceProperties.database}" to "${userSecret.username}";`)
-      await client.query(`grant SELECT, UPDATE, DELETE, INSERT on table "${event.ResourceProperties.database}".* to "${userSecret.username}";`)
+      // This will fail if no tables exist, so just eat the errors
+      await client.query(`grant SELECT, UPDATE, DELETE, INSERT on table "${event.ResourceProperties.database}".* to "${userSecret.username}";`).catch(err => null)
       break;
     case 'Delete':
       await client.query(`revoke all privileges on TABLE "${event.ResourceProperties.database}".* from "${userSecret.username}";`)

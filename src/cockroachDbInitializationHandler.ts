@@ -10,7 +10,6 @@ interface DBInitEvent {
 interface DBInitEventProperties {
   userSecretId: string;
   rootCertsSecretId: string;
-  database: string;
 }
 
 const secrets = new SecretsManager();
@@ -42,7 +41,6 @@ export async function handler(event: DBInitEvent) {
       key: Buffer.from(rootCerts.rootKey, "base64"),
       cert: Buffer.from(rootCerts.rootCrt, 'base64')
     },
-    database: event.ResourceProperties.database,
     user: "root",
     port: 26257,
     host: userSecret.endpoint,
@@ -50,7 +48,6 @@ export async function handler(event: DBInitEvent) {
 
   await client.connect();
 
-  await client.query(`create database if not exists "${event.ResourceProperties.database}";`)
   await client.query(`create user if not exists "${userSecret.username}" with password $1;`, [userSecret.password])
   await client.query(`grant admin to "${userSecret.username}";`)
 

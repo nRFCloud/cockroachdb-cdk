@@ -2,6 +2,8 @@ import { App, Stack } from '@aws-cdk/core';
 import { CockroachDBEKSCluster } from '../cockroachDBEKSCluster';
 import { SubnetType, Vpc } from '@aws-cdk/aws-ec2';
 import { Bucket } from '@aws-cdk/aws-s3';
+import { CockroachDBServerlessBridge } from '../cockroachDbServerlessBridge';
+import { Secret } from '@aws-cdk/aws-secretsmanager';
 
 export class TestStack extends Stack {
   constructor(parent: App) {
@@ -12,25 +14,15 @@ export class TestStack extends Stack {
       }
     });
 
-    const vpc = new Vpc(this, 'cockroach-vpc', {
-      subnetConfiguration: [
-        {subnetType: SubnetType.PUBLIC, name: 'cockroach-vpc-public'}
-      ],
-      natGateways: 0,
+    const cockroach = new CockroachDBServerlessBridge(this, 'cockroach', {
+      rootSecret: Secret.fromSecretName(this, 'root-secret', 'serverless-secret'),
     })
 
-    const backupBucket = new Bucket(this, 'cockroach-backups');
-    const cluster = new CockroachDBEKSCluster(this, 'cockroach-cluster', {
-      vpc,
-      vpcSubnets: [{subnetType: SubnetType.PUBLIC}],
-      desiredNodes: 6,
-      rootUsername: "nrfcloud",
-      database: "nrfcloud",
-      s3ReadBuckets: [backupBucket],
-      s3WriteBuckets: [backupBucket]
-    })
-    cluster.addUser('lambda_user')
-    cluster.automateBackup(backupBucket);
+    const backupBucket = new Bucket(this, 'serverless-backup')
+    // cockroach.automateBackup(backupBucket)
+
+    const nrfcloudDB = cockroach.addDatabase('nrfcloud-db', 'nrfcloud');
+    nrfcloudDB.addUser('db-access-user', 'lambda')
   }
 }
 

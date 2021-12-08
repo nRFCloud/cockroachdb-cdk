@@ -1,4 +1,4 @@
-import { Construct, CustomResource, Duration } from '@aws-cdk/core';
+import { Construct, CustomResource, Duration, RemovalPolicy } from '@aws-cdk/core';
 import { InstanceClass, InstanceSize, InstanceType, SubnetSelection, Vpc } from '@aws-cdk/aws-ec2';
 import {
   CapacityType,
@@ -17,22 +17,21 @@ import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs'
 import { Provider } from '@aws-cdk/custom-resources'
 import { join } from 'path';
 import { Bucket } from '@aws-cdk/aws-s3';
-import { CockroachDbUserCreateProvider } from './cockroachDbUserCreateProvider';
-import { CockroachDbRunSQLProvider } from './cockroachDbRunSQLProvider';
+import { CockroachDBSQLStatement } from './cockroachDbRunSQLProvider';
+import { CockroachDBCluster } from './index';
+import { CockroachDatabase } from './cockroachDatabase';
 
 const COCKROACHDB_CRD_URL = 'https://raw.githubusercontent.com/cockroachdb/cockroach-operator/v2.4.0/install/crds.yaml';
 const COCKROACHDB_OPERATOR_MANIFEST_URL = 'https://raw.githubusercontent.com/cockroachdb/cockroach-operator/v2.4.0/install/operator.yaml';
 
-export class CockroachDBEKSCluster extends Construct {
-  public readonly loadbalancerAddress: string;
+export class CockroachDBEKSCluster extends Construct implements CockroachDBCluster {
+  public readonly endpoint: string;
   private readonly kubeCluster: Cluster
   private readonly clusterConfigDeployment: KubernetesManifest
   private readonly dbInitResource: Construct;
-  private readonly rootSecret: Secret;
-  private readonly rootCertificatesSecret: ISecret;
+  public readonly rootSecret: Secret;
+  public readonly rootCertificatesSecret: ISecret;
   private readonly options: CockroachDBClusterConfig;
-  private readonly userCreateProvider: CockroachDbUserCreateProvider;
-  private readonly runSQLProvider: CockroachDbRunSQLProvider;
 
   public clusterAccessRole = new Role(this, 'cockroachdb-cluster-access-role', {
     assumedBy: new AnyPrincipal(),
@@ -156,7 +155,7 @@ export class CockroachDBEKSCluster extends Construct {
     const cockroachOperatorManifest = loadAll(request('GET', COCKROACHDB_OPERATOR_MANIFEST_URL).body.toString())
     const cockroachCRD = load(request('GET', COCKROACHDB_CRD_URL).body.toString());
 
-    return this.kubeCluster.addManifest('cockroachdb-control-manifest', cockroachCRD, ...cockroachOperatorManifest);
+    return cluster.addManifest('cockroachdb-control-manifest', cockroachCRD, ...cockroachOperatorManifest);
   }
 
   private configureStorage(cluster: Cluster) {
@@ -290,12 +289,10 @@ export class CockroachDBEKSCluster extends Construct {
     lbAddressObjectValue.node.addDependency(loadBalancer);
 
     this.rootCertificatesSecret = this.getRootKeys(this.kubeCluster, this.clusterConfigDeployment)
-    this.loadbalancerAddress = lbAddressObjectValue.value;
+    this.endpoint = lbAddressObjectValue.value;
     const initialization = this.dbInit(this.kubeCluster, options.rootUsername, options.database, this.rootCertificatesSecret)
     this.rootSecret = initialization.rootSecret;
     this.dbInitResource = initialization.dbInitResource;
-    this.userCreateProvider = new CockroachDbUserCreateProvider(this, 'user-create-provider', this.rootSecret, this.loadbalancerAddress, this.kubeCluster.kubectlPrivateSubnets ? this.kubeCluster.vpc : undefined, this.kubeCluster.kubectlPrivateSubnets ? this.kubeCluster.kubectlPrivateSubnets : undefined)
-    this.runSQLProvider = new CockroachDbRunSQLProvider(this, 'run-sql-provider', this.rootSecret, this.loadbalancerAddress, this.kubeCluster.kubectlPrivateSubnets ? this.kubeCluster.vpc : undefined, this.kubeCluster.kubectlPrivateSubnets ? this.kubeCluster.kubectlPrivateSubnets : undefined)
   }
 
   private getRootKeys(cluster: Cluster, clusterDeployment: KubernetesManifest): ISecret {
@@ -335,16 +332,14 @@ export class CockroachDBEKSCluster extends Construct {
     })
   }
 
-  public addUser(username: string) {
-    const secret = this.userCreateProvider.addUser(username, this.options.database);
-    secret.node.addDependency(this.dbInitResource);
-    return secret;
-  }
-
-  public runSql(id: string, upQuery: string, downQuery: string) {
-    const resource = this.runSQLProvider.runSQL(id, this.options.database, upQuery, downQuery);
-    resource.node.addDependency(this.dbInitResource);
-    return resource;
+  public runSql(id: string, upQuery: string, downQuery: string): CockroachDBSQLStatement {
+    const statement = new CockroachDBSQLStatement(this, id, {
+      cluster: this,
+      database: "defaultdb",
+      upQuery, downQuery
+    })
+    statement.node.addDependency(this.dbInitResource)
+    return statement;
   }
 
   public automateBackup(bucket: Bucket, path: string = "", schedule: string = '@daily') {
@@ -355,6 +350,14 @@ full backup always
 with schedule options first_run = 'now';`,
       `drop schedules select id from [show schedules] where label = 'dailybackup';`
       )
+  }
+
+  public addDatabase(id: string, database: string, removalPolicy: RemovalPolicy.RETAIN | RemovalPolicy.DESTROY = RemovalPolicy.RETAIN): CockroachDatabase {
+    return new CockroachDatabase(this, id, {
+      cluster: this,
+      database,
+      removalPolicy
+    })
   }
 
   private dbInit(cluster: Cluster, username: string, database: string, rootCertSecret: ISecret) {
@@ -380,7 +383,7 @@ with schedule options first_run = 'now';`,
     const secretData: Omit<CockroachDBUserSecret, 'password'> = {
       isAdmin: true,
       username,
-      endpoint: this.loadbalancerAddress,
+      endpoint: this.endpoint,
       port: 26257
     }
     const secret = new Secret(this, `root-user-secret`, {
@@ -445,7 +448,6 @@ export interface CockroachDBClusterConfig {
   cockroachImage?: string,
   s3ReadBuckets?: Bucket[],
   s3WriteBuckets?: Bucket[],
-
   rootUsername: string,
   database: string;
 }
@@ -456,6 +458,7 @@ export interface CockroachDBUserSecret {
   endpoint: string;
   isAdmin: boolean;
   port: number;
+  options?: string;
 }
 
 export interface CockroachDBRootCertificateSecret {

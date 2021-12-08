@@ -1,13 +1,13 @@
 import { SecretsManager } from 'aws-sdk';
 import { CockroachDBUserSecret } from './cockroachDBEKSCluster';
-import {Client} from 'pg';
+import { Client, ClientConfig } from 'pg';
 
-interface UserCreateEvent {
+interface RunSqlEvent {
   RequestType: 'Create' | 'Update' | 'Delete'
-  ResourceProperties: UserCreateEventProperties;
+  ResourceProperties: RunSqlEventProperties;
 }
 
-interface UserCreateEventProperties {
+interface RunSqlEventProperties {
   database: string;
   rootUserSecretId: string;
   upQuery: string;
@@ -16,7 +16,7 @@ interface UserCreateEventProperties {
 
 const secrets = new SecretsManager();
 
-export async function handler(event: UserCreateEvent) {
+export async function handler(event: RunSqlEvent) {
   console.log("Getting root secret")
   const rootSecretResponse = await secrets.getSecretValue({
     SecretId: event.ResourceProperties.rootUserSecretId
@@ -30,10 +30,11 @@ export async function handler(event: UserCreateEvent) {
     password: rootSecret.password,
     user: rootSecret.username,
     database: event.ResourceProperties.database,
+    options: rootSecret.options,
     ssl: {
       rejectUnauthorized: false
     }
-  })
+  } as ClientConfig)
 
   await client.connect();
 
