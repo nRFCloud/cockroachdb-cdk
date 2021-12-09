@@ -1,7 +1,8 @@
 import { Construct, CustomResource, Duration, RemovalPolicy } from '@aws-cdk/core';
-import { InstanceClass, InstanceSize, InstanceType, SubnetSelection, Vpc } from '@aws-cdk/aws-ec2';
+import { InstanceClass, InstanceSize, InstanceType, IVpc, Subnet, SubnetSelection, Vpc } from '@aws-cdk/aws-ec2';
 import {
-  CapacityType,
+  AlbControllerVersion,
+  CapacityType, CfnAddon,
   Cluster,
   EndpointAccess,
   KubernetesManifest,
@@ -26,12 +27,13 @@ const COCKROACHDB_OPERATOR_MANIFEST_URL = 'https://raw.githubusercontent.com/coc
 
 export class CockroachDBEKSCluster extends Construct implements CockroachDBCluster {
   public readonly endpoint: string;
-  private readonly kubeCluster: Cluster
+  public readonly kubeCluster: Cluster
   private readonly clusterConfigDeployment: KubernetesManifest
   private readonly dbInitResource: Construct;
   public readonly rootSecret: Secret;
   public readonly rootCertificatesSecret: ISecret;
   private readonly options: CockroachDBClusterConfig;
+  public readonly vpc: IVpc;
 
   public clusterAccessRole = new Role(this, 'cockroachdb-cluster-access-role', {
     assumedBy: new AnyPrincipal(),
@@ -143,8 +145,8 @@ export class CockroachDBEKSCluster extends Construct implements CockroachDBClust
         resources: ['*'],
       }))
       nodegroup.role.attachInlinePolicy(csiPolicy)
-      options.s3ReadBuckets.forEach(bucket => bucket.grantRead(nodegroup.role))
-      options.s3WriteBuckets.forEach(bucket => bucket.grantWrite(nodegroup.role))
+      options.s3ReadBuckets?.forEach(bucket => bucket.grantRead(nodegroup.role))
+      options.s3WriteBuckets?.forEach(bucket => bucket.grantWrite(nodegroup.role))
 
       nodegroups.push(nodegroup);
     })
@@ -158,29 +160,39 @@ export class CockroachDBEKSCluster extends Construct implements CockroachDBClust
     return cluster.addManifest('cockroachdb-control-manifest', cockroachCRD, ...cockroachOperatorManifest);
   }
 
-  private configureStorage(cluster: Cluster) {
-    return cluster.addHelmChart('ebs-csi', {
-      repository: "https://kubernetes-sigs.github.io/aws-ebs-csi-driver",
-      chart: "aws-ebs-csi-driver",
-      wait: true,
-      release: "aws-ebs-csi-driver",
-      namespace: "kube-system",
-      values: {
-        storageClasses: [
-          {
-            name: "gp3",
-            annotations: {
-              "storageclass.kubernetes.io/is-default-class": "true"
-            },
-            volumeBindingMode: "WaitForFirstConsumer",
-            allowVolumeExpansion: true,
-            parameters: {
-              type: "gp3"
-            }
-          }
-        ]
-      }
+  private configureVpcNetworking(cluster: Cluster) {
+    return new CfnAddon(this, 'vpc-cni', {
+      clusterName: cluster.clusterName,
+      addonName: "vpc-cni",
+      resolveConflicts: 'OVERWRITE',
     })
+  }
+
+  private configureStorage(cluster: Cluster) {
+    const addon = new CfnAddon(this, 'ebs-csi', {
+      clusterName: cluster.clusterName,
+      addonName: 'aws-ebs-csi-driver',
+      resolveConflicts: 'OVERWRITE'
+    })
+    const storageClass = cluster.addManifest('gp3-storage', {
+      "allowVolumeExpansion": true,
+      "apiVersion": "storage.k8s.io/v1",
+      "kind": "StorageClass",
+      "metadata": {
+        "annotations": {
+          "storageclass.kubernetes.io/is-default-class": "true"
+        },
+        "name": "gp3",
+      },
+      "parameters": {
+        "type": "gp3"
+      },
+      "provisioner": "ebs.csi.aws.com",
+      "reclaimPolicy": "Delete",
+      "volumeBindingMode": "WaitForFirstConsumer"
+    })
+    storageClass.node.addDependency(addon);
+    return storageClass;
   }
 
   private validateOptions(options: CockroachDBClusterConfig) {
@@ -205,8 +217,10 @@ export class CockroachDBEKSCluster extends Construct implements CockroachDBClust
       vpc: this.options.vpc,
       vpcSubnets: this.options.vpcSubnets,
       endpointAccess: this.options.kubeEndpointPublic ? EndpointAccess.PUBLIC_AND_PRIVATE : EndpointAccess.PRIVATE,
+      albController: {version: AlbControllerVersion.V2_3_0},
     })
 
+    this.vpc = this.kubeCluster.vpc;
     this.kubeCluster.awsAuth.addMastersRole(this.clusterAccessRole)
 
     const nodeGroup = this.addClusterCapacity(this.kubeCluster, this.options)
@@ -258,24 +272,30 @@ export class CockroachDBEKSCluster extends Construct implements CockroachDBClust
       kind: 'Service',
       metadata: {
         name: "cockroachdb-lb", "namespace": "cockroach-operator-system", annotations: {
-          "service.beta.kubernetes.io/aws-load-balancer-type": "nlb",
+          "service.beta.kubernetes.io/aws-load-balancer-type": "external",
+          "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "ip",
+          "service.beta.kubernetes.io/aws-load-balancer-attributes": "load_balancing.cross_zone.enabled=true",
+          "service.beta.kubernetes.io/aws-load-balancer-scheme": this.options.publiclyAvailable ? "internet-facing" : "internal"
         }
       },
       spec: {
         type: 'LoadBalancer',
-        ports: [{port: 26257, targetPort: 26257}],
+        ports: [{port: 26257, targetPort: 26257, protocol: 'TCP'}],
         selector: {"crdb": "cockroach-cluster"}
       }
     }
+
+
+    const vpcNetworking = this.configureVpcNetworking(this.kubeCluster);
 
     const storageSetup = this.configureStorage(this.kubeCluster);
     const operator = this.addCockroachControlResources(this.kubeCluster);
 
     this.clusterConfigDeployment = this.kubeCluster.addManifest('cockroachdb-cluster-manifest', cockroachCluster)
 
-    const loadBalancer = this.kubeCluster.addManifest('cockroach-lb', loadBalancerManifest)
+    const loadBalancer = this.kubeCluster.addManifest('cockroachdb-lb', loadBalancerManifest)
 
-    this.clusterConfigDeployment.node.addDependency(...nodeGroup, operator, storageSetup)
+    this.clusterConfigDeployment.node.addDependency(...nodeGroup, operator, storageSetup, vpcNetworking)
 
     loadBalancer.node.addDependency(this.clusterConfigDeployment)
 
@@ -290,7 +310,7 @@ export class CockroachDBEKSCluster extends Construct implements CockroachDBClust
 
     this.rootCertificatesSecret = this.getRootKeys(this.kubeCluster, this.clusterConfigDeployment)
     this.endpoint = lbAddressObjectValue.value;
-    const initialization = this.dbInit(this.kubeCluster, options.rootUsername, options.database, this.rootCertificatesSecret)
+    const initialization = this.dbInit(this.kubeCluster, options.rootUsername,this.rootCertificatesSecret)
     this.rootSecret = initialization.rootSecret;
     this.dbInitResource = initialization.dbInitResource;
   }
@@ -349,7 +369,7 @@ with detached RECURRING '@daily'
 full backup always 
 with schedule options first_run = 'now';`,
       `drop schedules select id from [show schedules] where label = 'dailybackup';`
-      )
+    )
   }
 
   public addDatabase(id: string, database: string, removalPolicy: RemovalPolicy.RETAIN | RemovalPolicy.DESTROY = RemovalPolicy.RETAIN): CockroachDatabase {
@@ -360,7 +380,7 @@ with schedule options first_run = 'now';`,
     })
   }
 
-  private dbInit(cluster: Cluster, username: string, database: string, rootCertSecret: ISecret) {
+  private dbInit(cluster: Cluster, username: string, rootCertSecret: ISecret) {
     const dbInitLambda = new NodejsFunction(this, 'cockroach-db-init-lambda', {
       vpc: this.kubeCluster.kubectlPrivateSubnets ? cluster.vpc : undefined,
       bundling: {
@@ -377,14 +397,15 @@ with schedule options first_run = 'now';`,
       onEventHandler: dbInitLambda,
       vpc: cluster.kubectlPrivateSubnets ? cluster.vpc : undefined,
       securityGroups: cluster.kubectlSecurityGroup ? [cluster.kubectlSecurityGroup] : undefined,
-      vpcSubnets: cluster.kubectlPrivateSubnets ? {subnets: cluster.kubectlPrivateSubnets} : undefined
+      vpcSubnets: cluster.kubectlPrivateSubnets ? {subnets: cluster.kubectlPrivateSubnets} : undefined,
     });
 
     const secretData: Omit<CockroachDBUserSecret, 'password'> = {
       isAdmin: true,
       username,
       endpoint: this.endpoint,
-      port: 26257
+      port: 26257,
+      options: ""
     }
     const secret = new Secret(this, `root-user-secret`, {
       generateSecretString: {
@@ -402,7 +423,6 @@ with schedule options first_run = 'now';`,
       properties: {
         userSecretId: secret.secretArn,
         rootCertsSecretId: rootCertSecret.secretArn,
-        database,
       }
     })
 
@@ -449,7 +469,6 @@ export interface CockroachDBClusterConfig {
   s3ReadBuckets?: Bucket[],
   s3WriteBuckets?: Bucket[],
   rootUsername: string,
-  database: string;
 }
 
 export interface CockroachDBUserSecret {
@@ -458,7 +477,7 @@ export interface CockroachDBUserSecret {
   endpoint: string;
   isAdmin: boolean;
   port: number;
-  options?: string;
+  options: string;
 }
 
 export interface CockroachDBRootCertificateSecret {

@@ -36,18 +36,15 @@ export async function handler(event: RunSqlEvent) {
     }
   } as ClientConfig)
 
+  console.log("Connecting")
   await client.connect();
 
   switch (event.RequestType) {
     case 'Create':
-      await client.query(event.ResourceProperties.upQuery);
-      break;
-    case 'Update':
-      await client.query(event.ResourceProperties.downQuery);
-      await client.query(event.ResourceProperties.upQuery);
+      console.log(await client.query(event.ResourceProperties.upQuery));
       break;
     case 'Delete':
-      await client.query(event.ResourceProperties.downQuery);
+      console.log(await client.query(event.ResourceProperties.downQuery));
       break;
   }
   await client.end();

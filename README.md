@@ -19,3 +19,4 @@ A wrapper for managing CockroachDB serverless with cloudformation
 Features:
 * Run SQL as cloudformation
 * Provision users and databases as cloudformation
+* Automatic S3 backups

@@ -9,7 +9,6 @@ export interface CockroachDBCluster extends Construct {
   readonly rootSecret: ISecret;
   readonly endpoint: string;
   readonly vpc?: IVpc;
-  readonly vpcPrivateSubnets?: ISubnet[];
   addDatabase(id: string, database: string, removalPolicy?: RemovalPolicy.RETAIN | RemovalPolicy.DESTROY): CockroachDatabase;
   runSql(id: string, upQuery: string, downQuery: string): CockroachDBSQLStatement;
   automateBackup(bucket: Bucket, path?: string, schedule?: string): CockroachDBSQLStatement;

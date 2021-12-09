@@ -1,5 +1,5 @@
-import { Construct, CustomResource } from '@aws-cdk/core';
-import { ISubnet, IVpc, SubnetType } from '@aws-cdk/aws-ec2';
+import { Construct, CustomResource, Duration } from '@aws-cdk/core';
+import { ISubnet, IVpc, SecurityGroup, SubnetType } from '@aws-cdk/aws-ec2';
 import { ISecret, Secret } from '@aws-cdk/aws-secretsmanager';
 import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs';
 import { join } from 'path';
@@ -25,19 +25,20 @@ export class CockroachDBSQLStatement extends Construct {
     this.database = options.database;
     this.cluster = options.cluster;
 
+
     const lambda = new NodejsFunction(this, 'run-sql-lambda', {
-      vpc: this.cluster.vpcPrivateSubnets ? this.cluster.vpc : undefined,
-      vpcSubnets: this.cluster.vpcPrivateSubnets ? {subnets: this.cluster.vpcPrivateSubnets} : undefined,
+      vpc: this.cluster.vpc,
       bundling: {
         minify: true,
         externalModules: ["pg-native", "aws-sdk"]
       },
-      entry: join(__dirname, "cockroachDbRunSQLHandler.js")
+      entry: join(__dirname, "cockroachDbRunSQLHandler.js"),
+      timeout: Duration.minutes(10)
     })
     this.cluster.rootSecret.grantRead(lambda);
 
     this.provider = new Provider(this, 'run-sql-provider', {
-      vpc: this.cluster.vpcPrivateSubnets ? this.cluster.vpc : undefined,
+      vpc: this.cluster.vpc,
       onEventHandler: lambda,
     })
 

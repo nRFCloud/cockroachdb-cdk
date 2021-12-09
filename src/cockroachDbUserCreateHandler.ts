@@ -47,13 +47,14 @@ export async function handler(event: UserCreateEvent) {
 
   switch (event.RequestType) {
     case 'Create':
-      await client.query(`create user "${userSecret.username}" with password $1;`, [userSecret.password]);
+      await client.query(`create user if not exists "${userSecret.username}";`);
+      await client.query(`alter user "${userSecret.username}" with password $1;`, [userSecret.password]);
       await client.query(`grant SELECT, UPDATE, DELETE, INSERT, CONNECT on database "${event.ResourceProperties.database}" to "${userSecret.username}";`)
       // This will fail if no tables exist, so just eat the errors
       await client.query(`grant SELECT, UPDATE, DELETE, INSERT on table "${event.ResourceProperties.database}".* to "${userSecret.username}";`).catch(err => null)
       break;
     case 'Delete':
-      await client.query(`revoke all privileges on TABLE "${event.ResourceProperties.database}".* from "${userSecret.username}";`)
+      await client.query(`revoke all privileges on TABLE "${event.ResourceProperties.database}".* from "${userSecret.username}";`).catch(err => null)
       await client.query(`revoke all privileges on DATABASE "${event.ResourceProperties.database}" from "${userSecret.username}";`)
       await client.query(`alter default privileges for all roles revoke all on tables from "${userSecret.username}" cascade;`)
       await client.query(`drop user "${userSecret.username}";`)

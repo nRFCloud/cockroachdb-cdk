@@ -24,8 +24,7 @@ export class CockroachDBSQLUser extends Construct {
     this.cluster = options.cluster;
 
     const lambda = new NodejsFunction(this, 'user-add-lambda', {
-      vpc: this.cluster.vpcPrivateSubnets ? this.cluster.vpc : undefined,
-      vpcSubnets: this.cluster.vpcPrivateSubnets ? {subnets: this.cluster.vpcPrivateSubnets} : undefined,
+      vpc: this.cluster.vpc,
       bundling: {
         minify: true,
         externalModules: ["pg-native", "aws-sdk"]
@@ -35,7 +34,7 @@ export class CockroachDBSQLUser extends Construct {
     this.cluster.rootSecret.grantRead(lambda)
 
     this.provider = new Provider(this, 'user-create-provider', {
-      vpc: this.cluster.vpcPrivateSubnets ? this.cluster.vpc : undefined,
+      vpc: this.cluster.vpc,
       onEventHandler: lambda,
     })
 
