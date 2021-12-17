@@ -14,13 +14,6 @@ export interface CockroachDBCluster extends Construct {
   automateBackup(bucket: Bucket, path?: string, schedule?: string): CockroachDBSQLStatement;
 }
 
-export {
-  CockroachDBEKSCluster,
-  CockroachDBUserSecret,
-  CockroachDBClusterConfig,
-  CockroachDBRootCertificateSecret,
-} from "./cockroachDBEKSCluster"
-
 export {CockroachDBServerlessBridge, CockroachDBServerlessConfig} from './cockroachDbServerlessBridge'
 
 export {CockroachDatabase} from './cockroachDatabase'

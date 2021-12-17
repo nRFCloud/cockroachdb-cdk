@@ -5,7 +5,6 @@ import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs';
 import { join } from 'path';
 import { Provider } from '@aws-cdk/custom-resources';
 import { IRole } from '@aws-cdk/aws-iam';
-import { CockroachDBUserSecret } from './cockroachDBEKSCluster';
 import { CockroachDatabase } from './cockroachDatabase';
 import { CockroachDBCluster } from './index';
 

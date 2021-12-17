@@ -1,7 +1,7 @@
 import { SecretsManager } from 'aws-sdk';
-import { CockroachDBUserSecret } from './cockroachDBEKSCluster';
 import { Client, ClientConfig } from 'pg';
 import { Construct } from '@aws-cdk/core';
+import { CockroachDBUserSecret } from './lib/types';
 
 interface UserCreateEvent {
   RequestType: 'Create' | 'Update' | 'Delete'
@@ -22,14 +22,14 @@ export async function handler(event: UserCreateEvent) {
     SecretId: event.ResourceProperties.rootUserSecretId
   }).promise();
 
-  const rootSecret: CockroachDBUserSecret = JSON.parse(rootSecretResponse.SecretString);
+  const rootSecret: CockroachDBUserSecret = JSON.parse(rootSecretResponse.SecretString!);
 
   console.log("Getting new user secret")
   const userSecretResponse = await secrets.getSecretValue({
     SecretId: event.ResourceProperties.userSecretId
   }).promise()
 
-  const userSecret: CockroachDBUserSecret = JSON.parse(userSecretResponse.SecretString);
+  const userSecret: CockroachDBUserSecret = JSON.parse(userSecretResponse.SecretString!);
 
   const client = new Client({
     host: rootSecret.endpoint,

@@ -2,7 +2,7 @@ import {SecretsManager} from 'aws-sdk'
 import type { CockroachDBUserSecret, CockroachDBRootCertificateSecret } from './cockroachDBEKSCluster'
 import {Client} from 'pg'
 import { promisify } from 'util';
-const timeoutAsync = promisify((ms: number, cb: () => null) => setTimeout(cb, ms))
+const timeoutAsync = promisify((ms: number, cb: (err: any) => void) => setTimeout(cb, ms))
 
 interface DBInitEvent {
   RequestType: 'Create' | 'Update' | 'Delete'
@@ -27,13 +27,13 @@ export async function handler(event: DBInitEvent) {
     SecretId: event.ResourceProperties.userSecretId,
   }).promise();
 
-  const userSecret: CockroachDBUserSecret = JSON.parse(userSecretResponse.SecretString);
+  const userSecret: CockroachDBUserSecret = JSON.parse(userSecretResponse.SecretString!);
 
   const rootCertSecretResponse = await secrets.getSecretValue({
     SecretId: event.ResourceProperties.rootCertsSecretId
   }).promise();
 
-  const rootCerts: CockroachDBRootCertificateSecret = JSON.parse(rootCertSecretResponse.SecretString)
+  const rootCerts: CockroachDBRootCertificateSecret = JSON.parse(rootCertSecretResponse.SecretString!)
   console.log(`Starting user creation for ${userSecret.username}`)
 
   const client = new Client({
@@ -56,7 +56,7 @@ export async function handler(event: DBInitEvent) {
 }
 
 async function retryWithBackoff<T>(func: (...args: any[]) => T, tries = 10): Promise<T> {
-  let lastErr: Error;
+  let lastErr: Error = new Error();
   for (let i=0; i < tries; i++) {
     try {
       const result = await func();

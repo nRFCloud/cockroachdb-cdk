@@ -1,6 +1,6 @@
 import { SecretsManager } from 'aws-sdk';
-import { CockroachDBUserSecret } from './cockroachDBEKSCluster';
 import { Client, ClientConfig } from 'pg';
+import { CockroachDBUserSecret } from './lib/types';
 
 interface RunSqlEvent {
   RequestType: 'Create' | 'Update' | 'Delete'
@@ -22,7 +22,7 @@ export async function handler(event: RunSqlEvent) {
     SecretId: event.ResourceProperties.rootUserSecretId
   }).promise();
 
-  const rootSecret: CockroachDBUserSecret = JSON.parse(rootSecretResponse.SecretString);
+  const rootSecret: CockroachDBUserSecret = JSON.parse(rootSecretResponse.SecretString!);
 
   const client = new Client({
     host: rootSecret.endpoint,

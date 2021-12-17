@@ -1,6 +1,7 @@
 {
         "compileOnSave": true,
         "compilerOptions": {
+                "strictNullChecks": true,
                 "skipLibCheck": true,
                 "removeComments": true,
                 "incremental": true,
@@ -22,7 +23,7 @@
                         ]
                 },
                 "types": [
-                        "node",
+                        "node"
                 ],
                 "alwaysStrict": true
         },

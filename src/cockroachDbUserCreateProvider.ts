@@ -3,8 +3,8 @@ import { Secret } from '@aws-cdk/aws-secretsmanager';
 import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs';
 import { join } from 'path';
 import { Provider } from '@aws-cdk/custom-resources';
-import { CockroachDBUserSecret } from './cockroachDBEKSCluster';
 import { CockroachDBCluster } from './index';
+import { CockroachDBUserSecret } from './lib/types';
 
 export class CockroachDBSQLUser extends Construct {
   public readonly username: string;

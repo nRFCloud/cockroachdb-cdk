@@ -18,9 +18,10 @@ import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs'
 import { Provider } from '@aws-cdk/custom-resources'
 import { join } from 'path';
 import { Bucket } from '@aws-cdk/aws-s3';
-import { CockroachDBSQLStatement } from './cockroachDbRunSQLProvider';
-import { CockroachDBCluster } from './index';
-import { CockroachDatabase } from './cockroachDatabase';
+import { CockroachDBSQLStatement } from '../cockroachDbRunSQLProvider';
+import { CockroachDBCluster } from '../index';
+import { CockroachDatabase } from '../cockroachDatabase';
+import { readFileSync } from 'fs';
 
 const COCKROACHDB_CRD_URL = 'https://raw.githubusercontent.com/cockroachdb/cockroach-operator/v2.4.0/install/crds.yaml';
 const COCKROACHDB_OPERATOR_MANIFEST_URL = 'https://raw.githubusercontent.com/cockroachdb/cockroach-operator/v2.4.0/install/operator.yaml';
@@ -154,7 +155,7 @@ export class CockroachDBEKSCluster extends Construct implements CockroachDBClust
   }
 
   private addCockroachControlResources(cluster: Cluster) {
-    const cockroachOperatorManifest = loadAll(request('GET', COCKROACHDB_OPERATOR_MANIFEST_URL).body.toString())
+    const cockroachOperatorManifest = loadAll(readFileSync(join(__dirname, '..', 'operator.yaml'), 'utf8'))
     const cockroachCRD = load(request('GET', COCKROACHDB_CRD_URL).body.toString());
 
     return cluster.addManifest('cockroachdb-control-manifest', cockroachCRD, ...cockroachOperatorManifest);
@@ -234,7 +235,7 @@ export class CockroachDBEKSCluster extends Construct implements CockroachDBClust
       },
       "spec": {
         "dataStore": {
-          "supportsAutoResize": true,
+          "supportsAutoResize": false,
           "pvc": {
             "spec": {
               storageClassName: "gp3",
@@ -437,20 +438,31 @@ with schedule options first_run = 'now';`,
 const CockroachDBClusterDefaults: Omit<CockroachDBClusterConfig, 'vpc' | 'database' | 'rootUsername'> = {
   kubeEndpointPublic: true,
   desiredNodes: 3,
+  // instanceTypes: [
+  //   InstanceType.of(InstanceClass.M6I, InstanceSize.XLARGE),
+  //   InstanceType.of(InstanceClass.C6I, InstanceSize.XLARGE),
+  //   new InstanceType('m6a.xlarge'),
+  //   InstanceType.of(InstanceClass.C5, InstanceSize.XLARGE),
+  //   InstanceType.of(InstanceClass.C5N, InstanceSize.XLARGE),
+  //   InstanceType.of(InstanceClass.C5D, InstanceSize.XLARGE),
+  //   InstanceType.of(InstanceClass.M5, InstanceSize.XLARGE),
+  //   InstanceType.of(InstanceClass.M5N, InstanceSize.XLARGE),
+  //   InstanceType.of(InstanceClass.M5D, InstanceSize.XLARGE),
+  //   InstanceType.of(InstanceClass.C5A, InstanceSize.XLARGE),
+  //   InstanceType.of(InstanceClass.C5AD, InstanceSize.XLARGE),
+  //   InstanceType.of(InstanceClass.M5A, InstanceSize.XLARGE),
+  //   InstanceType.of(InstanceClass.M5AD, InstanceSize.XLARGE),
+  // ],
   instanceTypes: [
-    InstanceType.of(InstanceClass.M6I, InstanceSize.XLARGE),
-    InstanceType.of(InstanceClass.C6I, InstanceSize.XLARGE),
-    new InstanceType('m6a.xlarge'),
-    InstanceType.of(InstanceClass.C5, InstanceSize.XLARGE),
-    InstanceType.of(InstanceClass.C5N, InstanceSize.XLARGE),
     InstanceType.of(InstanceClass.C5D, InstanceSize.XLARGE),
-    InstanceType.of(InstanceClass.M5, InstanceSize.XLARGE),
-    InstanceType.of(InstanceClass.M5N, InstanceSize.XLARGE),
     InstanceType.of(InstanceClass.M5D, InstanceSize.XLARGE),
-    InstanceType.of(InstanceClass.C5A, InstanceSize.XLARGE),
+    InstanceType.of(InstanceClass.M5DN, InstanceSize.XLARGE),
     InstanceType.of(InstanceClass.C5AD, InstanceSize.XLARGE),
-    InstanceType.of(InstanceClass.M5A, InstanceSize.XLARGE),
     InstanceType.of(InstanceClass.M5AD, InstanceSize.XLARGE),
+    InstanceType.of(InstanceClass.R5AD, InstanceSize.XLARGE),
+    InstanceType.of(InstanceClass.R5D, InstanceSize.XLARGE),
+    InstanceType.of(InstanceClass.R5DN, InstanceSize.XLARGE),
+
   ],
   cockroachImage: "cockroachdb/cockroach:v21.2.2",
   publiclyAvailable: false,

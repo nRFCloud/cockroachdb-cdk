@@ -1,7 +1,7 @@
 import { App, Stack, Tags } from '@aws-cdk/core';
 import { InstanceClass, InstanceSize, NatInstanceProvider, Vpc, InstanceType } from '@aws-cdk/aws-ec2';
 import {KeyPair} from 'cdk-ec2-key-pair'
-import { CockroachDBEKSCluster } from '../cockroachDBEKSCluster';
+import { CockroachDBEKSCluster } from '../archive/cockroachDBEKSCluster';
 import { data } from 'aws-cdk/lib/logging';
 import { User } from '@aws-cdk/aws-iam';
 
@@ -29,7 +29,8 @@ export class TestStack extends Stack {
     const cockroach = new CockroachDBEKSCluster(this, 'db-cluster', {
       vpc,
       publiclyAvailable: false,
-      rootUsername: "nrfcloud"
+      rootUsername: "nrfcloud",
+      storageRequest: 200
     })
 
     cockroach.kubeCluster.awsAuth.addUserMapping(User.fromUserName(this, 'me', 'jfconley'), {groups: ['system:masters', 'cluster-admin']})
