@@ -1,8 +1,9 @@
 import { App, CfnOutput, Stack } from '@aws-cdk/core';
-import { InstanceClass, InstanceSize, InstanceType, NatInstanceProvider, SubnetType, Vpc } from '@aws-cdk/aws-ec2';
+import { InstanceClass, InstanceSize, InstanceType, NatInstanceProvider, Vpc } from '@aws-cdk/aws-ec2';
 import { CockroachDBECS } from '../cockroachDBECS';
 import { KeyPair } from 'cdk-ec2-key-pair';
 import { GatewayVpcEndpointAwsService } from '@aws-cdk/aws-ec2/lib/vpc-endpoint';
+import { Cluster } from '@aws-cdk/aws-ecs';
 
 export class TestStackECS extends Stack {
   constructor(parent: App) {
@@ -31,7 +32,10 @@ export class TestStackECS extends Stack {
     const cluster = new CockroachDBECS(this, 'cockroach-cluster', {
       vpc,
       onDemandNodes: 0,
+      nodes: 6,
+      defaultReplicationFactor: 5,
       onDemandMetrics: false,
+      adminUsername: "nrfcloud"
     })
 
     new CfnOutput(this, 'ca-crt-output', {

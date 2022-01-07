@@ -49,3 +49,190 @@ export interface CockroachDBUserSecret {
   port: number;
   options: string;
 }
+
+export interface LifecycleTerminationEvent {
+  "version": number,
+  "id": string,
+  "detail-type": "EC2 Instance-terminate Lifecycle Action",
+  "source": "aws.autoscaling",
+  "account": string,
+  "time": string,
+  "region": string,
+  "resources": [
+    string
+  ],
+  "detail": {
+    "LifecycleActionToken": string,
+    "AutoScalingGroupName": string,
+    "LifecycleHookName": string,
+    "EC2InstanceId": string,
+    "LifecycleTransition": string,
+    "NotificationMetadata": string
+  }
+}
+
+export interface LifecycleLaunchEvent {
+  "version": string,
+  "id": string,
+  "detail-type": "EC2 Instance-launch Lifecycle Action",
+  "source": "aws.autoscaling",
+  "account": string,
+  "time": string,
+  "region": string,
+  "resources": [
+    string
+  ],
+  "detail": {
+    "LifecycleActionToken": string,
+    "AutoScalingGroupName": string,
+    "LifecycleHookName": string,
+    "EC2InstanceId": string,
+    "LifecycleTransition": "autoscaling:EC2_INSTANCE_LAUNCHING",
+    "NotificationMetadata": string
+  }
+}
+
+export interface RebalanceRecommendationEvent {
+  "version": string,
+  "id": string,
+  "detail-type": "EC2 Instance Rebalance Recommendation",
+  "source": "aws.ec2",
+  "account": string,
+  "time": string,
+  "region": string,
+  "resources": [string],
+  "detail": {
+    "instance-id": string
+  }
+}
+
+export interface TaskStateChangeEvent {
+  "version": string,
+  "id": string,
+  "detail-type": "ECS Task State Change",
+  "source": "aws.ecs",
+  "account": string,
+  "time": string,
+  "region": string,
+  "resources": [
+    string
+  ],
+  "detail": {
+    "clusterArn": string,
+    "desiredStatus": string,
+    "group": string,
+    "lastStatus": string,
+    "taskArn": string,
+  }
+}
+
+export interface ServiceDeploymentInProgressEvent {
+  "version": string,
+  "id": string,
+  "detail-type": "ECS Deployment State Change",
+  "source": "aws.ecs",
+  "account": string,
+  "time": string,
+  "region": string,
+  "resources": [
+    string
+  ],
+  "detail": {
+    "eventType": "INFO",
+    "eventName": "SERVICE_DEPLOYMENT_IN_PROGRESS",
+    "deploymentId": string,
+    "updatedAt": string,
+    "reason": string
+  }
+}
+
+export interface ServiceDeploymentCompletedEvent {
+  "version": string,
+  "id": string,
+  "detail-type": "ECS Deployment State Change",
+  "source": "aws.ecs",
+  "account": string,
+  "time": string,
+  "region": string,
+  "resources": [
+    string
+  ],
+  "detail": {
+    "eventType": "INFO",
+    "eventName": "SERVICE_DEPLOYMENT_COMPLETED",
+    "deploymentId": string,
+    "updatedAt": string,
+    "reason": string
+  }
+}
+
+export interface ServiceDeploymentFailedEvent {
+  "version": string,
+  "id": string,
+  "detail-type": "ECS Deployment State Change",
+  "source": "aws.ecs",
+  "account": string,
+  "time": string,
+  "region": string,
+  "resources": [
+    string
+  ],
+  "detail": {
+    "eventType": "ERROR",
+    "eventName": "SERVICE_DEPLOYMENT_FAILED",
+    "deploymentId": string,
+    "updatedAt": string,
+    "reason": string
+  }
+}
+
+export interface EC2TerminationSuccessful {
+  "version": string,
+  "id": string,
+  "detail-type": "EC2 Instance Terminate Successful",
+  "source": "aws.autoscaling",
+  "account": string,
+  "time": string,
+  "region": string,
+  "resources": [
+    string,
+    string
+  ],
+  "detail": {
+    "StatusCode": "InProgress",
+    "Description": "Terminating EC2 instance: i-12345678",
+    "AutoScalingGroupName": string,
+    "ActivityId": string,
+    "RequestId": string,
+    "StatusMessage": string,
+    "EndTime": string,
+    "EC2InstanceId": string,
+    "StartTime": string,
+    "Cause": string
+  }
+}
+
+export interface EC2TerminationUnsuccessful {
+  "version": string,
+  "id": string,
+  "detail-type": "EC2 Instance Terminate Unsuccessful",
+  "source": "aws.autoscaling",
+  "account": string,
+  "time": string,
+  "region": string,
+  "resources": [
+    string,
+    string
+  ],
+  "detail": {
+    "StatusCode": "Failed",
+    "AutoScalingGroupName": string,
+    "ActivityId": string,
+    "RequestId": string,
+    "StatusMessage": string,
+    "EndTime": string,
+    "EC2InstanceId": string,
+    "StartTime": string,
+    "Cause": string
+  }
+}

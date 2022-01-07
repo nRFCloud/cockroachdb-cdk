@@ -3,11 +3,13 @@
 # Exit immediately on failure
 set -ex
 
-DISK_BASE="/.bottlerocket/rootfs/dev"
-BASE_MOUNT_POINT="/.bottlerocket/rootfs/mnt"
-PARTITION_CREATED_BASE="/.bottlerocket/bootstrap-containers/current"
+DISK_BASE="/dev"
+BASE_MOUNT_POINT="/ecs/mounts"
+PARTITION_CREATED_BASE="/ecs/mounts/markers"
 INSTANCE_DRIVES=$(lsblk -d --sort NAME --output NAME,MODEL -n | grep Instance | awk '{print $1}')
 DISK_NUMBER=0
+
+mkdir -p $PARTITION_CREATED_BASE
 
 for DRIVE in $INSTANCE_DRIVES; do
   echo "Found instance store: ${DRIVE}"
@@ -15,15 +17,16 @@ for DRIVE in $INSTANCE_DRIVES; do
   DISK="$DISK_BASE/$DRIVE"
   PARTITION_CREATED="$PARTITION_CREATED_BASE/$DRIVE"
   if [ ! -f $PARTITION_CREATED ]; then
-    parted -s $DISK mklabel gpt 1>/dev/null
-    parted -s $DISK mkpart primary ext4 0% 100% 1>/dev/null
-    mkfs.ext4 -F ${DISK}p1
+    mkfs -t ext4 $DISK
     touch $PARTITION_CREATED
     echo "Partitioned ${DRIVE}"
   fi
-  mkdir -p $BASE_MOUNT_POINT/$DRIVE
-  mount ${DISK}p1 $MOUNT_PATH
+  mkdir -p $MOUNT_PATH
+  FSTAB_LINE="$DISK   $MOUNT_PATH   ext4   defaults,noatime,nodiratime,nobarrier,errors=remount-ro   0   2"
+  echo "$FSTAB_LINE" >> /etc/fstab
+
+  mount $MOUNT_PATH
   touch $MOUNT_PATH/available
-  DISK_NUMBER++
+  DISK_NUMBER=$((DISK_NUMBER+1))
   echo "Mounted $DRIVE to $MOUNT_PATH"
 done

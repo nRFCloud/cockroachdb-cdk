@@ -31,7 +31,7 @@ export class CockroachDBSQLUser extends Construct {
       },
       entry: join(__dirname, "cockroachDbUserCreateHandler.js")
     })
-    this.cluster.rootSecret.grantRead(lambda)
+    this.cluster.adminSecret.grantRead(lambda)
 
     this.provider = new Provider(this, 'user-create-provider', {
       vpc: this.cluster.vpc,
@@ -43,7 +43,7 @@ export class CockroachDBSQLUser extends Construct {
       username: this.username,
       endpoint: this.cluster.endpoint,
       port: 26257,
-      options: this.cluster.rootSecret.secretValueFromJson('options').toString()
+      options: this.cluster.adminSecret.secretValueFromJson('options').toString()
     }
     // Username used in id to enforce safe naming scheme
     this.secret = new Secret(this, 'user-secret-' + this.username, {
@@ -62,7 +62,7 @@ export class CockroachDBSQLUser extends Construct {
       properties: {
         userSecretId: this.secret.secretArn,
         database: this.database,
-        rootUserSecretId: this.cluster.rootSecret.secretArn
+        rootUserSecretId: this.cluster.adminSecret.secretArn
       }
     });
   }

@@ -7,14 +7,14 @@ import { Bucket } from '@aws-cdk/aws-s3';
 import { CockroachDatabase } from './cockroachDatabase';
 
 export class CockroachDBServerlessBridge extends Construct implements CockroachDBCluster {
-  public readonly rootSecret: ISecret;
+  public readonly adminSecret: ISecret;
   public readonly endpoint: string;
 
   constructor(scope: Construct, id: string, private readonly options: CockroachDBServerlessConfig) {
     super(scope, id);
 
-    this.rootSecret = options.rootSecret;
-    this.endpoint = this.rootSecret.secretValueFromJson('endpoint').toString()
+    this.adminSecret = options.rootSecret;
+    this.endpoint = this.adminSecret.secretValueFromJson('endpoint').toString()
   }
 
   public addDatabase(id: string, database: string, removalPolicy: RemovalPolicy.RETAIN | RemovalPolicy.DESTROY = RemovalPolicy.RETAIN): CockroachDatabase {

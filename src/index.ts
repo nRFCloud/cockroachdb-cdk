@@ -6,7 +6,7 @@ import { ISubnet, IVpc, Vpc } from '@aws-cdk/aws-ec2';
 import { CockroachDBSQLStatement } from './cockroachDbRunSQLProvider';
 
 export interface CockroachDBCluster extends Construct {
-  readonly rootSecret: ISecret;
+  readonly adminSecret: ISecret;
   readonly endpoint: string;
   readonly vpc?: IVpc;
   addDatabase(id: string, database: string, removalPolicy?: RemovalPolicy.RETAIN | RemovalPolicy.DESTROY): CockroachDatabase;

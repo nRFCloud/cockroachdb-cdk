@@ -34,7 +34,7 @@ export class CockroachDBSQLStatement extends Construct {
       entry: join(__dirname, "cockroachDbRunSQLHandler.js"),
       timeout: Duration.minutes(10)
     })
-    this.cluster.rootSecret.grantRead(lambda);
+    this.cluster.adminSecret.grantRead(lambda);
 
     this.provider = new Provider(this, 'run-sql-provider', {
       vpc: this.cluster.vpc,
@@ -47,7 +47,7 @@ export class CockroachDBSQLStatement extends Construct {
         database: this.database,
         upQuery: options.upQuery,
         downQuery: options.downQuery,
-        rootUserSecretId: this.cluster.rootSecret.secretArn
+        rootUserSecretId: this.cluster.adminSecret.secretArn
       }
     })
   }
