@@ -37,7 +37,6 @@ export class CockroachInitializeAdminUser extends Construct {
     })
 
     const initAdminProvider = new Provider(this, 'init-admin-provider', {
-      vpc: options.vpc,
       onEventHandler: initAdminHandler,
     })
 

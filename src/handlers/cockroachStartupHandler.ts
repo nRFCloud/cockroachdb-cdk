@@ -1,11 +1,13 @@
 import { LifecycleLaunchEvent } from '../lib/types';
 import { AutoScaling, EC2, ECS, SSM } from 'aws-sdk';
 import {get, RequestOptions} from "https"
-import { promisify } from 'util';
 import { IncomingMessage } from 'http';
 import { retryWithBackoff } from '../lib/lib';
 
-const getPromise = promisify((arg: RequestOptions, callback: (err: any, res: IncomingMessage) => void) => get(arg, (res) => callback(null, res)))
+const getPromise = (options: RequestOptions) => new Promise((resolve: (res: IncomingMessage) => void, reject) => {
+  const result = get(options, resolve);
+  result.on('error', reject);
+})
 
 const ecsCluster = process.env.ECS_CLUSTER;
 const serviceName = process.env.SERVICE_NAME || "";

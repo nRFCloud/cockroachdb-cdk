@@ -32,12 +32,11 @@ export class CockroachDBSQLStatement extends Construct {
         externalModules: ["pg-native", "aws-sdk"]
       },
       entry: join(__dirname, "cockroachDbRunSQLHandler.js"),
-      timeout: Duration.minutes(10)
+      timeout: Duration.minutes(1)
     })
     this.cluster.adminSecret.grantRead(lambda);
 
     this.provider = new Provider(this, 'run-sql-provider', {
-      vpc: this.cluster.vpc,
       onEventHandler: lambda,
     })
 

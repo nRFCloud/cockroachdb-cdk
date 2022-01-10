@@ -13,12 +13,15 @@ export async function handler(event: LifecycleLaunchEvent) {
     }
   }, 1000, 500)
     .then(() => complete(event, "CONTINUE"))
-    .catch(() => AutoScaleClient.recordLifecycleActionHeartbeat({
-      InstanceId: event.detail.EC2InstanceId,
-      LifecycleHookName: event.detail.LifecycleHookName,
-      AutoScalingGroupName: event.detail.AutoScalingGroupName,
-      LifecycleActionToken: event.detail.LifecycleActionToken
-    }).promise())
+    .catch(async (err) => {
+      await AutoScaleClient.recordLifecycleActionHeartbeat({
+        InstanceId: event.detail.EC2InstanceId,
+        LifecycleHookName: event.detail.LifecycleHookName,
+        AutoScalingGroupName: event.detail.AutoScalingGroupName,
+        LifecycleActionToken: event.detail.LifecycleActionToken
+      }).promise()
+      throw err;
+    })
 }
 
 async function complete(event: LifecycleLaunchEvent, result: "CONTINUE" | "ABANDON") {

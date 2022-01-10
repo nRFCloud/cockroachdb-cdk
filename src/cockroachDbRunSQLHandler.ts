@@ -31,6 +31,7 @@ export async function handler(event: RunSqlEvent) {
     user: rootSecret.username,
     database: event.ResourceProperties.database,
     options: rootSecret.options,
+    connectionTimeoutMillis: 20000,
     ssl: {
       rejectUnauthorized: false
     }
@@ -44,7 +45,9 @@ export async function handler(event: RunSqlEvent) {
       console.log(await client.query(event.ResourceProperties.upQuery));
       break;
     case 'Delete':
-      console.log(await client.query(event.ResourceProperties.downQuery));
+      if (event.ResourceProperties.downQuery) {
+        console.log(await client.query(event.ResourceProperties.downQuery));
+      }
       break;
   }
   await client.end();

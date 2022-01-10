@@ -4,6 +4,7 @@ import { CockroachDBECS } from '../cockroachDBECS';
 import { KeyPair } from 'cdk-ec2-key-pair';
 import { GatewayVpcEndpointAwsService } from '@aws-cdk/aws-ec2/lib/vpc-endpoint';
 import { Cluster } from '@aws-cdk/aws-ecs';
+import { Bucket } from '@aws-cdk/aws-s3';
 
 export class TestStackECS extends Stack {
   constructor(parent: App) {
@@ -32,11 +33,19 @@ export class TestStackECS extends Stack {
     const cluster = new CockroachDBECS(this, 'cockroach-cluster', {
       vpc,
       onDemandNodes: 0,
-      nodes: 6,
+      nodes: 9,
       defaultReplicationFactor: 5,
       onDemandMetrics: false,
       adminUsername: "nrfcloud"
     })
+
+    const backupBucket = new Bucket(this, 'backup-bucket');
+
+    cluster.automateBackup(backupBucket, undefined)
+
+    const db = cluster.addDatabase('db', 'nrfcloud')
+
+    const user = db.addUser('user', 'lambda')
 
     new CfnOutput(this, 'ca-crt-output', {
       exportName: 'caCrtParam',

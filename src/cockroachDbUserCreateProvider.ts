@@ -34,7 +34,6 @@ export class CockroachDBSQLUser extends Construct {
     this.cluster.adminSecret.grantRead(lambda)
 
     this.provider = new Provider(this, 'user-create-provider', {
-      vpc: this.cluster.vpc,
       onEventHandler: lambda,
     })
 

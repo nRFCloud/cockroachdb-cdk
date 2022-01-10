@@ -2,13 +2,15 @@ import { CfnWaitCondition, CfnWaitConditionHandle, Construct, Duration, RemovalP
 import {
   AmiHardwareType,
   AsgCapacityProvider,
-  BaseService, BottleRocketImage,
+  BaseService,
+  BottleRocketImage,
   CfnTaskDefinition,
   Cluster,
   ContainerImage,
   DeploymentControllerType,
   Ec2Service,
   Ec2TaskDefinition,
+  EcsOptimizedImage,
   FargateService,
   FargateTaskDefinition,
   LogDriver,
@@ -61,9 +63,9 @@ import { CockroachDatabase, CockroachDBCluster, CockroachDBSQLStatement } from '
 import { CockroachInitializeAdminUser } from './lib/cockroachInitializeAdminUser';
 import { ISecret } from '@aws-cdk/aws-secretsmanager';
 import { Bucket } from '@aws-cdk/aws-s3';
-import { EcsOptimizedImage } from '@aws-cdk/aws-ecs/lib/amis';
 import { CockroachStartupHook } from './lib/cockroachStartupHook';
 import { CockroachStartupTerminationWaitHook } from './lib/cockroachStartupTerminationWaitHook';
+import { DockerImageAsset } from '@aws-cdk/aws-ecr-assets';
 
 export class CockroachDBECS extends Construct implements CockroachDBCluster {
   private readonly internalBaseDomain = 'cockroach.db.crdb.com'
@@ -192,9 +194,9 @@ ALTER RANGE default CONFIGURE ZONE USING num_replicas = ${this.options.defaultRe
     return db;
   }
 
-  public automateBackup(bucket: Bucket, path?: string, schedule?: string): CockroachDBSQLStatement {
-    bucket.grantWrite(this.cockroachTask.taskRole)
-    return this.runSql('automatic-backup', 'automatic-backups',
+  public automateBackup(bucket: Bucket, path: string = "backup", schedule?: string): CockroachDBSQLStatement {
+    bucket.grantReadWrite(this.cockroachTask.taskRole)
+    return this.runSql('automatic-backup',
       `create schedule dailybackup for backup into 's3://${bucket.bucketName}/${path}?AUTH=implicit'
 with detached RECURRING '@daily'
 full backup always 
@@ -344,13 +346,12 @@ with schedule options first_run = 'now';`,
   }
 
   private configureTask(caCerts: CockroachCA, nodeCerts: CockroachNodeCertificates, rootCerts: CockroachClientCertificates): Ec2TaskDefinition {
-    const bottlerocketMountPoint = "/ecs/mounts";
-    // const bottlerocketMountPoint = "/mnt";
+    const mountPoint = "/mnt";
     const volumeConfigs = [...new Array(5)].map((_, idx) => (
       {
         name: "drive" + idx,
         host: {
-          sourcePath: join(bottlerocketMountPoint, "drive" + idx)
+          sourcePath: join(mountPoint, "drive" + idx)
         }
       }
     ));
@@ -505,19 +506,19 @@ with schedule options first_run = 'now';`,
       },
       taskDefinition: task,
       healthCheckGracePeriod: Duration.minutes(60),
-      enableExecuteCommand: true,
     })
 
-    service.node.addDependency( capacityProvider)
+    service.node.addDependency(capacityProvider)
     return service;
   }
 
   private addEc2SpotCapacity(cluster: Cluster, options: CockroachDBECSFargateOptionsWithDefaults) {
-    const init = new InitConfig([
+    const amazonLinuxInit = new InitConfig([
       InitFile.fromAsset('/var/lib/cloud/scripts/per-boot/mount.sh', join(__dirname, '..', 'ephemeral-bootstrap', 'setup.sh'), {mode: '000700'}),
       InitCommand.argvCommand(["/var/lib/cloud/scripts/per-boot/mount.sh"]),
       InitCommand.shellCommand('echo ECS_IMAGE_PULL_BEHAVIOR=prefer-cached >> /etc/ecs/ecs.config'),
-      InitCommand.shellCommand('echo ECS_RESERVED_MEMORY=256 >> /etc/ecs/ecs.config'),
+      InitCommand.shellCommand('echo ECS_RESERVED_MEMORY=128 >> /etc/ecs/ecs.config'),
+      InitCommand.shellCommand('echo ECS_ENABLE_SPOT_INSTANCE_DRAINING=true >> /etc/ecs/ecs.config')
     ])
 
     const serviceSG = new SecurityGroup(this, 'cockroach-service-sg', {
@@ -529,19 +530,17 @@ with schedule options first_run = 'now';`,
     serviceSG.addIngressRule(Peer.ipv4(cluster.vpc.vpcCidrBlock), Port.tcp(26258), 'cockroach-sql-access')
     serviceSG.addIngressRule(Peer.ipv4(cluster.vpc.vpcCidrBlock), Port.tcp(8080), 'cockroach-sql-access')
 
-    // const bootstrapImage = new DockerImageAsset(this, 'bootstrap-image', {
-    //   directory: join(__dirname, '..', 'ephemeral-bootstrap')
-    // })
+    const bootstrapImage = new DockerImageAsset(this, 'bootstrap-image', {
+      directory: join(__dirname, '..', 'ephemeral-bootstrap')
+    })
 
     const asg = new AutoScalingGroup(this, 'cockroach-asg', {
       allowAllOutbound: true,
       securityGroup: serviceSG,
-      // machineImage: new BottleRocketImage({cachedInContext: true}),
-      machineImage: EcsOptimizedImage.amazonLinux2(AmiHardwareType.STANDARD),
+      machineImage: (this.options.instanceAmi === MachineImageType.BOTTLEROCKET) ? new BottleRocketImage({cachedInContext: true}) : EcsOptimizedImage.amazonLinux2(AmiHardwareType.STANDARD),
       updatePolicy: UpdatePolicy.rollingUpdate({
         minInstancesInService: options.nodes,
-        waitOnResourceSignals: true,
-
+        waitOnResourceSignals: this.options.instanceAmi === MachineImageType.AMAZON_LINUX_2,
       }),
       instanceType: InstanceType.of(InstanceClass.C5AD, InstanceSize.XLARGE),
       vpc: cluster.vpc,
@@ -553,24 +552,18 @@ with schedule options first_run = 'now';`,
       //   grace: Duration.minutes(5)
       // })
       maxCapacity: options.nodes + 1,
-      init: CloudFormationInit.fromConfig(init),
-      initOptions: {
-        embedFingerprint: true,
-      },
-      signals: Signals.waitForAll(),
-      newInstancesProtectedFromScaleIn: true,
-      cooldown: Duration.minutes(15),
+      ...((this.options.instanceAmi === MachineImageType.AMAZON_LINUX_2) ? {
+        init: CloudFormationInit.fromConfig(amazonLinuxInit),
+        initOptions: {
+          embedFingerprint: true,
+        },
+        signals: Signals.waitForAll(),
+      } : {}),
+      newInstancesProtectedFromScaleIn: false,
+      cooldown: Duration.minutes(25),
     })
 
-    // bootstrapImage.repository.grantPull(asg.role)
-
-    // ECS AMI is missing the cfn-init scripts, and cdk ignores this
-    // We force the installation to happen before user data tries to call the scripts.
-    const userData = (asg.userData as any);
-    userData.lines = [
-      'yum install -y aws-cfn-bootstrap',
-      ...userData.lines
-    ]
+    bootstrapImage.repository.grantPull(asg.role)
 
     asg.role.addManagedPolicy(ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'))
     asg.role.addToPrincipalPolicy(new PolicyStatement({
@@ -585,26 +578,34 @@ with schedule options first_run = 'now';`,
         }
       }
     }))
-    asg.addUserData('echo ECS_ENABLE_SPOT_INSTANCE_DRAINING=true >> /etc/ecs/ecs.config');// Force running init scripts every boot
-    // asg.addUserData('sed -i \'s/scripts-user$/\\[scripts-user, always\\]/\' /etc/cloud/cloud.cfg')
 
     const provider = new AsgCapacityProvider(this, 'cockroach-asg-provider', {
       autoScalingGroup: asg,
       spotInstanceDraining: true,
       enableManagedScaling: false,
-      machineImageType: MachineImageType.AMAZON_LINUX_2,
-      enableManagedTerminationProtection: true,
+      machineImageType: this.options.instanceAmi,
+      enableManagedTerminationProtection: false,
     });
     provider.node.addDependency(asg);
     cluster.addAsgCapacityProvider(provider)
 
-    // asg.userData.addCommands(
-    //   'enable-spot-instance-draining = true',
-    //   '[settings.bootstrap-containers.setup-ephemeral-disks]',
-    //   `source = "${bootstrapImage.imageUri}"`,
-    //   'mode = "always"',
-    //   'essential = false'
-    // )
+    // ECS AMI is missing the cfn-amazonLinuxInit scripts, and cdk ignores this
+    // We force the installation to happen before user data tries to call the scripts.
+    if (this.options.instanceAmi === MachineImageType.AMAZON_LINUX_2) {
+      const userData = (asg.userData as any);
+      userData.lines = [
+        'yum install -y aws-cfn-bootstrap',
+        ...userData.lines
+      ]
+    } else {
+      asg.userData.addCommands(
+        'enable-spot-instance-draining = true',
+        '[settings.bootstrap-containers.setup-ephemeral-disks]',
+        `source = "${bootstrapImage.imageUri}"`,
+        'mode = "always"',
+        'essential = false'
+      )
+    }
 
     const cfnAsg = asg.node.defaultChild as CfnAutoScalingGroup;
 
@@ -661,7 +662,7 @@ with schedule options first_run = 'now';`,
                 max: 32 * 1024
               },
               acceleratorCount: {max: 0},
-              totalLocalStorageGb: {min: 60, max: 1000},
+              totalLocalStorageGb: {min: 60, max: 200},
               localStorageTypes: ["ssd"],
               cpuManufacturers: ["intel", 'amd'],
               burstablePerformance: 'excluded',
@@ -749,7 +750,7 @@ with schedule options first_run = 'now';`,
                 {
                   source_labels: ["store"],
                   label_matcher: '^.*',
-                  dimensions: [["ClusterName"], ["ClusterName", "store", "instance"]],
+                  dimensions: [["ClusterName", "store", "instance"]],
                   metric_selectors: [
                     "^ranges_underreplicated$",
                     "^ranges_unavailable$",
@@ -848,6 +849,8 @@ export interface CockroachDBECSFargateOptions {
    * The default replica count for the cluster. Should be an odd number less than or equal to your node count
    */
   defaultReplicationFactor?: number
+
+  instanceAmi?: MachineImageType
 }
 
 type CockroachDBECSFargateOptionsWithDefaults =
@@ -864,5 +867,6 @@ const CockroachDBECSFargateOptionsDefaults = {
   importBuckets: [] as Bucket[],
   exportBuckets: [] as Bucket[],
   defaultReplicationFactor: 3,
-  onDemandRatio: 0
+  onDemandRatio: 0,
+  instanceAmi: MachineImageType.BOTTLEROCKET
 }
