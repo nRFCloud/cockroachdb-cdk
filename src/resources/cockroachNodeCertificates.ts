@@ -7,6 +7,7 @@ import { PolicyStatement } from '@aws-cdk/aws-iam';
 import { Provider } from '@aws-cdk/custom-resources';
 import { IStringParameter, StringParameter } from '@aws-cdk/aws-ssm';
 import { OpenSSLLayer } from '../lib/openSSLLayer';
+import { getHandlerPath } from '../lib/lib';
 
 export class CockroachNodeCertificates extends Construct {
   public readonly nodeCrt: IStringParameter;
@@ -22,7 +23,7 @@ export class CockroachNodeCertificates extends Construct {
         externalModules: ['aws-sdk'],
       },
       layers: [new OpenSSLLayer(this, 'openssl-layer')],
-      entry: join(__dirname, '..', 'handlers', 'cockroachCertHandler.js'),
+      entry: getHandlerPath('cockroachCertHandler.js'),
     });
 
     options.caKeyParameter.grantRead(lambda)

@@ -6,6 +6,7 @@ import { Effect, PolicyStatement } from '@aws-cdk/aws-iam';
 import { AutoScalingGroup, DefaultResult, LifecycleTransition } from '@aws-cdk/aws-autoscaling';
 import { Rule } from '@aws-cdk/aws-events';
 import { LambdaFunction } from '@aws-cdk/aws-events-targets';
+import { getHandlerPath } from './lib';
 
 export class CockroachStartupTerminationWaitHook extends Construct {
   constructor(scope: Construct, id: string, options: {
@@ -21,7 +22,7 @@ export class CockroachStartupTerminationWaitHook extends Construct {
       },
       memorySize: 4096,
       timeout: Duration.minutes(15),
-      entry: join(__dirname, '..', 'handlers', 'cockroachStartupTerminationWaitHandler.js'),
+      entry: getHandlerPath('cockroachStartupTerminationWaitHandler.js'),
     })
 
     waitHandler.addToRolePolicy(new PolicyStatement({

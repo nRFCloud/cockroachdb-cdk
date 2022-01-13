@@ -66,12 +66,14 @@ import { Bucket } from '@aws-cdk/aws-s3';
 import { CockroachStartupHook } from './lib/cockroachStartupHook';
 import { CockroachStartupTerminationWaitHook } from './lib/cockroachStartupTerminationWaitHook';
 import { DockerImageAsset } from '@aws-cdk/aws-ecr-assets';
+import { CONTAINER_PATH, getContainerPath } from './lib/lib';
+import InstanceRequirementsProperty = CfnAutoScalingGroup.InstanceRequirementsProperty;
 
 export class CockroachDBECS extends Construct implements CockroachDBCluster {
   private readonly internalBaseDomain = 'cockroach.db.crdb.com'
   private readonly internalDomainPrefix: string;
   private readonly internalDomain: string;
-  private readonly options: CockroachDBECSFargateOptionsWithDefaults;
+  private readonly options: CockroachDBECSOptionsWithDefaults;
   private readonly cluster: Cluster;
   public readonly vpc: IVpc;
   public readonly ca = new CockroachCA(this, 'cockroach-ca-certs')
@@ -83,7 +85,7 @@ export class CockroachDBECS extends Construct implements CockroachDBCluster {
   private readonly adminInit: CockroachInitializeAdminUser;
   private readonly cockroachTask: Ec2TaskDefinition;
 
-  private addValidation(options: CockroachDBECSFargateOptionsWithDefaults) {
+  private addValidation(options: CockroachDBECSOptionsWithDefaults) {
     this.node.addValidation({
       validate: () => {
         const errors = [];
@@ -101,12 +103,12 @@ export class CockroachDBECS extends Construct implements CockroachDBCluster {
     })
   }
 
-  constructor(stack: Construct, id: string, options: CockroachDBECSFargateOptions) {
+  constructor(stack: Construct, id: string, options: CockroachDBECSOptions) {
     super(stack, id);
     this.options = {
-      ...CockroachDBECSFargateOptionsDefaults,
+      ...CockroachDBECSOptionsDefaults,
       ...options,
-    }
+    } as CockroachDBECSOptionsWithDefaults
 
     this.addValidation(this.options)
     this.rootCerts = this.ca.createClientCertificates(this.optionalUniqueCertId('cockroach-root-certs'), 'root')
@@ -165,20 +167,23 @@ export class CockroachDBECS extends Construct implements CockroachDBCluster {
     this.adminSecret = this.adminInit.secret;
 
     this.runSql('db-settings-init',
-      `set cluster setting kv.snapshot_recovery.max_rate = '256 MB';
-set cluster setting kv.snapshot_rebalance.max_rate = '256 MB';
+      `set cluster setting kv.snapshot_recovery.max_rate = '${this.options.rebalanceRate}';
+set cluster setting kv.snapshot_rebalance.max_rate = '${this.options.rebalanceRate}';
 set cluster setting server.shutdown.drain_wait = '25s';
 SET CLUSTER SETTING server.time_until_store_dead = '1m15s';
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = ${this.options.defaultReplicationFactor};`,
-      ``,
+      undefined,
+      undefined,
+      true
     )
   }
 
-  public runSql(id: string, upQuery: string, downQuery: string, database = "defaultdb"): CockroachDBSQLStatement {
+  public runSql(id: string, upQuery: string, downQuery?: string, database = "defaultdb", updateOnChange = false): CockroachDBSQLStatement {
     const statement = new CockroachDBSQLStatement(this, id, {
       cluster: this,
       upQuery, downQuery,
-      database
+      database,
+      updateOnChange
     })
     statement.node.addDependency(this.adminInit);
     return statement;
@@ -283,7 +288,7 @@ with schedule options first_run = 'now';`,
     cwAgentTask.addContainer('cockroach-cw-agent-container', {
       essential: true,
       logging: LogDriver.awsLogs({streamPrefix: "/ecs/ecs-cwagent-prometheus"}),
-      image: ContainerImage.fromAsset(join(__dirname, '..', 'cw-agent')),
+      image: ContainerImage.fromAsset(getContainerPath('cw-agent')),
       secrets: {
         PROMETHEUS_CONFIG_CONTENT: ContainerSecret.fromSsmParameter(prometheusConfig),
         CW_CONFIG_CONTENT: ContainerSecret.fromSsmParameter(cwAgentConfig)
@@ -383,7 +388,7 @@ with schedule options first_run = 'now';`,
       stopTimeout: Duration.minutes(60),
       containerName: "cockroachdb-container",
       logging: LogDriver.awsLogs({streamPrefix: "cockroach"}),
-      memoryReservationMiB: 4096,
+      memoryReservationMiB: 1024,
       portMappings: [{containerPort: 8080, protocol: Protocol.TCP, hostPort: 8080}, {
         containerPort: 26257,
         protocol: Protocol.TCP,
@@ -408,7 +413,7 @@ with schedule options first_run = 'now';`,
         AWS_REGION: Stack.of(this).region,
         MIN_PEERS: (this.options.nodes > 3 ? 3 : 2) + ""
       },
-      image: ContainerImage.fromAsset(join(__dirname, '..', 'cockroach-bootstraped'), {
+      image: ContainerImage.fromAsset(getContainerPath('cockroach-bootstraped'), {
         buildArgs: {
           COCKROACH_IMAGE: this.options.cockroachImage
         }
@@ -452,7 +457,7 @@ with schedule options first_run = 'now';`,
     task.addContainer('cockroach-init-container', {
       containerName: "cockroach-init",
       logging: LogDriver.awsLogs({streamPrefix: 'cockroach-init'}),
-      image: ContainerImage.fromAsset(join(__dirname, '..', 'cockroach-initializer'), {
+      image: ContainerImage.fromAsset(getContainerPath('cockroach-initializer'), {
         buildArgs: {
           COCKROACH_IMAGE: this.options.cockroachImage
         },
@@ -512,9 +517,9 @@ with schedule options first_run = 'now';`,
     return service;
   }
 
-  private addEc2SpotCapacity(cluster: Cluster, options: CockroachDBECSFargateOptionsWithDefaults) {
+  private addEc2SpotCapacity(cluster: Cluster, options: CockroachDBECSOptionsWithDefaults) {
     const amazonLinuxInit = new InitConfig([
-      InitFile.fromAsset('/var/lib/cloud/scripts/per-boot/mount.sh', join(__dirname, '..', 'ephemeral-bootstrap', 'setup.sh'), {mode: '000700'}),
+      InitFile.fromAsset('/var/lib/cloud/scripts/per-boot/mount.sh', join(CONTAINER_PATH, 'ephemeral-bootstrap', 'setup.sh'), {mode: '000700'}),
       InitCommand.argvCommand(["/var/lib/cloud/scripts/per-boot/mount.sh"]),
       InitCommand.shellCommand('echo ECS_IMAGE_PULL_BEHAVIOR=prefer-cached >> /etc/ecs/ecs.config'),
       InitCommand.shellCommand('echo ECS_RESERVED_MEMORY=128 >> /etc/ecs/ecs.config'),
@@ -531,7 +536,7 @@ with schedule options first_run = 'now';`,
     serviceSG.addIngressRule(Peer.ipv4(cluster.vpc.vpcCidrBlock), Port.tcp(8080), 'cockroach-sql-access')
 
     const bootstrapImage = new DockerImageAsset(this, 'bootstrap-image', {
-      directory: join(__dirname, '..', 'ephemeral-bootstrap')
+      directory: getContainerPath('ephemeral-bootstrap')
     })
 
     const asg = new AutoScalingGroup(this, 'cockroach-asg', {
@@ -647,28 +652,7 @@ with schedule options first_run = 'now';`,
         },
         overrides: [
           {
-            instanceRequirements: {
-              instanceGenerations: ["current"],
-              vCpuCount: {
-                max: 4,
-                min: 4
-              },
-              memoryGiBPerVCpu: {
-                min: 2,
-                max: 8
-              },
-              memoryMiB: {
-                min: 16 * 1024,
-                max: 32 * 1024
-              },
-              acceleratorCount: {max: 0},
-              totalLocalStorageGb: {min: 60, max: 200},
-              localStorageTypes: ["ssd"],
-              cpuManufacturers: ["intel", 'amd'],
-              burstablePerformance: 'excluded',
-              localStorage: 'required',
-              bareMetal: "excluded",
-            }
+            instanceRequirements: this.options.instanceRequirements
           }
         ]
       }
@@ -794,7 +778,7 @@ with schedule options first_run = 'now';`,
   }
 }
 
-export interface CockroachDBECSFargateOptions {
+export interface CockroachDBECSOptions {
   /**
    * Number of nodes in the cluster. Minimum of 3.
    * @default 3
@@ -850,16 +834,68 @@ export interface CockroachDBECSFargateOptions {
    */
   defaultReplicationFactor?: number
 
+  /**
+   * Sets the AMI deployed to ECS instances. Probably just leave this set to BOTTLEROCKET
+   */
   instanceAmi?: MachineImageType
+
+  /**
+   * Controls what type of instances will be selected by the autoscaling group.
+   */
+  instanceRequirements?: InstanceRequirementsProperty
+
+  /**
+   * Rate at which ranges will rebalance within the cluster.
+   * Only really needs to be changed when using burstable instances.
+   */
+  rebalanceRate?: '256 MB' | '128 MB' | '64 MB' | '32 MB' | '16 MB'
 }
 
-type CockroachDBECSFargateOptionsWithDefaults =
-  CockroachDBECSFargateOptions
-  & typeof CockroachDBECSFargateOptionsDefaults;
+type CockroachDBECSOptionsWithDefaults =
+  CockroachDBECSOptions
+  & typeof CockroachDBECSOptionsDefaults;
 
-const CockroachDBECSFargateOptionsDefaults = {
+export const ProductionInstanceRequirements: InstanceRequirementsProperty = {
+  instanceGenerations: ["current"],
+  vCpuCount: {
+    max: 4,
+    min: 4
+  },
+  memoryGiBPerVCpu: {
+    min: 2,
+    max: 8
+  },
+  memoryMiB: {
+    min: 16 * 1024,
+    max: 32 * 1024
+  },
+  acceleratorCount: {max: 0},
+  totalLocalStorageGb: {min: 60, max: 200},
+  localStorageTypes: ["ssd"],
+  cpuManufacturers: ["intel", 'amd'],
+  burstablePerformance: 'excluded',
+  localStorage: 'required',
+  bareMetal: "excluded",
+}
+
+export const DevelopmentInstanceRequirements: InstanceRequirementsProperty = {
+  cpuManufacturers: ["intel", 'amd'],
+  burstablePerformance: 'required',
+  memoryMiB: {
+    min: 2 * 1024,
+    max: 2 * 1024
+  },
+  instanceGenerations: ["current"],
+  vCpuCount: {
+    min: 2,
+    max: 2
+  },
+}
+
+
+const CockroachDBECSOptionsDefaults = {
   nodes: 3,
-  cockroachImage: "cockroachdb/cockroach:v21.2.3",
+  cockroachImage: "cockroachdb/cockroach:v21.2.4",
   rotateCertsOnDeployment: false,
   enhancedMetrics: true,
   onDemandNodes: 2,
@@ -868,5 +904,7 @@ const CockroachDBECSFargateOptionsDefaults = {
   exportBuckets: [] as Bucket[],
   defaultReplicationFactor: 3,
   onDemandRatio: 0,
-  instanceAmi: MachineImageType.BOTTLEROCKET
+  instanceAmi: MachineImageType.BOTTLEROCKET,
+  instanceRequirements: ProductionInstanceRequirements,
+  rebalanceRate: '256 MB'
 }

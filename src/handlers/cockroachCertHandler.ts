@@ -1,12 +1,11 @@
 import { CustomResourceProviderRequest, CustomResourceProviderResponse } from '../lib/types';
-import {SecretsManager, SSM} from 'aws-sdk'
+import { SSM } from 'aws-sdk'
 import { execFileSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { mkdirSync, read, readFileSync, write, writeFileSync } from 'fs';
-import { createHash, randomBytes, randomInt, randomUUID } from 'crypto';
-import { CockroachClientCertificates } from '../resources/cockroachClientCertificates';
-import { create } from 'domain';
+import { mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { randomBytes, randomUUID } from 'crypto';
+import { hashString } from '../lib/lib';
 
 type CreateCockroachCARequest = CustomResourceProviderRequest<'Custom::CockroachCA', {}>
 type CreateCockroachNodeCertificatesRequest = CustomResourceProviderRequest<'Custom::CockroachNodeCertificates', {
@@ -108,10 +107,6 @@ extendedKeyUsage = serverAuth,clientAuth
 keyUsage = critical,digitalSignature,keyEncipherment
 extendedKeyUsage = clientAuth`;
 writeFileSync(caCnfPath, caCnfContent);
-
-function hashString(string: string, chars = 6) {
-  return createHash('sha1').update(string).digest().toString('hex').substr(0, chars)
-}
 
 async function saveCaKeyMaterial(caCrtParameter: string, caKeyParameter: string) {
   const [{Parameter: caKeyParam}, {Parameter: caCrtParam}] = await Promise.all([

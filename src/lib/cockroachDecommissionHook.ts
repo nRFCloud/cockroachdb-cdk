@@ -10,6 +10,7 @@ import { LogGroup } from '@aws-cdk/aws-logs';
 import { Cluster, Ec2Service } from '@aws-cdk/aws-ecs';
 import { CockroachCA } from '../resources/cockroachCA';
 import { CockroachClientCertificates } from '../resources/cockroachClientCertificates';
+import { getHandlerPath } from './lib';
 
 export class CockroachDecommissionHook extends Construct {
   constructor(scope: Construct, id: string,options: {
@@ -30,7 +31,7 @@ export class CockroachDecommissionHook extends Construct {
       },
       memorySize: 4096,
       timeout: Duration.minutes(1),
-      entry: join(__dirname, '..', 'handlers', 'cockroachDecommissionHandler.js'),
+      entry: getHandlerPath('cockroachDecommissionHandler.js'),
       environment: {
         CLUSTER_NAME: 'cockroach',
         ECS_CLUSTER: cluster.clusterName,

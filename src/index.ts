@@ -3,7 +3,7 @@ import { Construct, RemovalPolicy } from '@aws-cdk/core';
 import { Bucket } from '@aws-cdk/aws-s3';
 import { CockroachDatabase } from './cockroachDatabase';
 import { ISubnet, IVpc, Vpc } from '@aws-cdk/aws-ec2';
-import { CockroachDBSQLStatement } from './cockroachDbRunSQLProvider';
+import { CockroachDBSQLStatement } from './resources/cockroachDbRunSQLProvider';
 
 export interface CockroachDBCluster extends Construct {
   readonly adminSecret: ISecret;
@@ -14,8 +14,9 @@ export interface CockroachDBCluster extends Construct {
   automateBackup(bucket: Bucket, path?: string, schedule?: string): CockroachDBSQLStatement;
 }
 
-export {CockroachDBServerlessBridge, CockroachDBServerlessConfig} from './cockroachDbServerlessBridge'
+export {CockroachDBServerlessBridge, CockroachDBServerlessConfig} from './cockroachDbServerlessBridge';
+export {CockroachDBECS, CockroachDBECSOptions, ProductionInstanceRequirements, DevelopmentInstanceRequirements} from './cockroachDBECS'
 
 export {CockroachDatabase} from './cockroachDatabase'
-export {CockroachDBSQLStatement} from './cockroachDbRunSQLProvider'
-export {CockroachDBSQLUser} from './cockroachDbUserCreateProvider'
+export {CockroachDBSQLStatement} from './resources/cockroachDbRunSQLProvider'
+export {CockroachDBSQLUser} from './resources/cockroachDbUserCreateProvider'

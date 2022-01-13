@@ -8,6 +8,7 @@ import { CockroachCLILayer } from './cockroachCLILayer';
 import { join } from 'path';
 import { SqsEventSource } from '@aws-cdk/aws-lambda-event-sources';
 import { Effect, PolicyStatement } from '@aws-cdk/aws-iam';
+import { getHandlerPath } from './lib';
 
 export class CockroachTaskDrainHook extends Construct {
   constructor(scope: Construct, id: string, options: {
@@ -33,7 +34,7 @@ export class CockroachTaskDrainHook extends Construct {
       },
       memorySize: 4096,
       timeout: Duration.minutes(1),
-      entry: join(__dirname, '..', 'handlers', 'cockroachDrainHandler.js'),
+      entry: getHandlerPath('cockroachDrainHandler.js'),
       environment: {
         ECS_CLUSTER: cluster.clusterName,
         QUEUE_URL: queue.queueUrl,

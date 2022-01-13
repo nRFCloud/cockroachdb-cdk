@@ -2,7 +2,7 @@ import { Construct, RemovalPolicy } from '@aws-cdk/core';
 import { ISecret } from '@aws-cdk/aws-secretsmanager';
 import { CfnAccessKey, User } from '@aws-cdk/aws-iam';
 import { CockroachDBCluster } from './index';
-import { CockroachDBSQLStatement } from './cockroachDbRunSQLProvider';
+import { CockroachDBSQLStatement } from './resources/cockroachDbRunSQLProvider';
 import { Bucket } from '@aws-cdk/aws-s3';
 import { CockroachDatabase } from './cockroachDatabase';
 

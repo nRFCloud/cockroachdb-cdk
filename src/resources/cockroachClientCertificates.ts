@@ -7,6 +7,7 @@ import { Provider } from '@aws-cdk/custom-resources';
 import { IStringParameter, StringParameter } from '@aws-cdk/aws-ssm';
 import { OpenSSLLayer } from '../lib/openSSLLayer';
 import { KubernetesManifest } from '@aws-cdk/aws-eks';
+import { getHandlerPath } from '../lib/lib';
 
 export interface ICockroachClientCertificates {
   username: string;
@@ -32,7 +33,7 @@ export class CockroachClientCertificates extends Construct implements ICockroach
         externalModules: ['aws-sdk'],
       },
       layers: [new OpenSSLLayer(this, 'openssl-layer')],
-      entry: join(__dirname, '..', 'handlers', 'cockroachCertHandler.js'),
+      entry: getHandlerPath('cockroachCertHandler.js'),
     });
 
     options.caKeyParameter.grantRead(lambda)

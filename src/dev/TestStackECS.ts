@@ -1,9 +1,9 @@
 import { App, CfnOutput, Stack } from '@aws-cdk/core';
 import { InstanceClass, InstanceSize, InstanceType, NatInstanceProvider, Vpc } from '@aws-cdk/aws-ec2';
-import { CockroachDBECS } from '../cockroachDBECS';
+import { CockroachDBECS, DevelopmentInstanceRequirements } from '../cockroachDBECS';
 import { KeyPair } from 'cdk-ec2-key-pair';
 import { GatewayVpcEndpointAwsService } from '@aws-cdk/aws-ec2/lib/vpc-endpoint';
-import { Cluster } from '@aws-cdk/aws-ecs';
+import { MachineImageType } from '@aws-cdk/aws-ecs';
 import { Bucket } from '@aws-cdk/aws-s3';
 
 export class TestStackECS extends Stack {
@@ -33,10 +33,12 @@ export class TestStackECS extends Stack {
     const cluster = new CockroachDBECS(this, 'cockroach-cluster', {
       vpc,
       onDemandNodes: 0,
-      nodes: 9,
-      defaultReplicationFactor: 5,
+      nodes: 3,
+      defaultReplicationFactor: 3,
       onDemandMetrics: false,
-      adminUsername: "nrfcloud"
+      enhancedMetrics: false,
+      adminUsername: "nrfcloud",
+      instanceRequirements: DevelopmentInstanceRequirements
     })
 
     const backupBucket = new Bucket(this, 'backup-bucket');

@@ -6,6 +6,7 @@ import { Effect, PolicyStatement } from '@aws-cdk/aws-iam';
 import { AutoScalingGroup, DefaultResult, LifecycleTransition } from '@aws-cdk/aws-autoscaling';
 import { Rule } from '@aws-cdk/aws-events';
 import { LambdaFunction } from '@aws-cdk/aws-events-targets';
+import { getHandlerPath } from './lib';
 
 export class CockroachStartupHook extends Construct {
   constructor(scope: Construct, id: string, options: {
@@ -24,7 +25,7 @@ export class CockroachStartupHook extends Construct {
       },
       memorySize: 4096,
       timeout: Duration.minutes(5),
-      entry: join(__dirname, '..', 'handlers', 'cockroachStartupHandler.js'),
+      entry: getHandlerPath('cockroachStartupHandler.js'),
       environment: {
         ECS_CLUSTER: cluster.clusterName,
         SERVICE_NAME: service.serviceName

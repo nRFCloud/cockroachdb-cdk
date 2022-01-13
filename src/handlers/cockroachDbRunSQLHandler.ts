@@ -1,6 +1,6 @@
 import { SecretsManager } from 'aws-sdk';
 import { Client, ClientConfig } from 'pg';
-import { CockroachDBUserSecret } from './lib/types';
+import { CockroachDBUserSecret } from '../lib/types';
 
 interface RunSqlEvent {
   RequestType: 'Create' | 'Update' | 'Delete'
@@ -31,21 +31,21 @@ export async function handler(event: RunSqlEvent) {
     user: rootSecret.username,
     database: event.ResourceProperties.database,
     options: rootSecret.options,
-    connectionTimeoutMillis: 20000,
+    connectionTimeoutMillis: 10000,
     ssl: {
       rejectUnauthorized: false
     }
   } as ClientConfig)
 
   console.log("Connecting")
-  await client.connect();
-
   switch (event.RequestType) {
     case 'Create':
+      await client.connect();
       console.log(await client.query(event.ResourceProperties.upQuery));
       break;
     case 'Delete':
-      if (event.ResourceProperties.downQuery) {
+      if (event.ResourceProperties.downQuery && event.ResourceProperties.downQuery != "") {
+        await client.connect();
         console.log(await client.query(event.ResourceProperties.downQuery));
       }
       break;

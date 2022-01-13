@@ -1,7 +1,7 @@
 import { SecretsManager } from 'aws-sdk';
 import { Client, ClientConfig } from 'pg';
 import { Construct } from '@aws-cdk/core';
-import { CockroachDBUserSecret } from './lib/types';
+import { CockroachDBUserSecret } from '../lib/types';
 
 interface UserCreateEvent {
   RequestType: 'Create' | 'Update' | 'Delete'
@@ -38,6 +38,7 @@ export async function handler(event: UserCreateEvent) {
     user: rootSecret.username,
     options: rootSecret.options,
     database: event.ResourceProperties.database,
+    connectionTimeoutMillis: 10000,
     ssl: {
       rejectUnauthorized: false
     }

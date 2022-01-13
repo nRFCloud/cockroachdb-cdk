@@ -1,10 +1,11 @@
-import { Construct, CustomResource } from '@aws-cdk/core';
+import { Construct, CustomResource, Duration } from '@aws-cdk/core';
 import { Secret } from '@aws-cdk/aws-secretsmanager';
 import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs';
 import { join } from 'path';
 import { Provider } from '@aws-cdk/custom-resources';
-import { CockroachDBCluster } from './index';
-import { CockroachDBUserSecret } from './lib/types';
+import { CockroachDBCluster } from '../index';
+import { CockroachDBUserSecret } from '../lib/types';
+import { getHandlerPath } from '../lib/lib';
 
 export class CockroachDBSQLUser extends Construct {
   public readonly username: string;
@@ -29,7 +30,8 @@ export class CockroachDBSQLUser extends Construct {
         minify: true,
         externalModules: ["pg-native", "aws-sdk"]
       },
-      entry: join(__dirname, "cockroachDbUserCreateHandler.js")
+      timeout: Duration.minutes(1),
+      entry: getHandlerPath("cockroachDbUserCreateHandler.js")
     })
     this.cluster.adminSecret.grantRead(lambda)
 

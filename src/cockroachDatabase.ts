@@ -1,6 +1,6 @@
 import { Construct, RemovalPolicy } from '@aws-cdk/core';
-import { CockroachDBSQLStatement } from './cockroachDbRunSQLProvider';
-import { CockroachDBSQLUser } from './cockroachDbUserCreateProvider';
+import { CockroachDBSQLStatement } from './resources/cockroachDbRunSQLProvider';
+import { CockroachDBSQLUser } from './resources/cockroachDbUserCreateProvider';
 import { CockroachDBCluster } from './index';
 
 export class CockroachDatabase extends Construct {

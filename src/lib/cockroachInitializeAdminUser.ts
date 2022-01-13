@@ -8,6 +8,7 @@ import { CustomResourceProvider } from '@aws-cdk/core/lib/custom-resource-provid
 import { Provider } from '@aws-cdk/custom-resources';
 import { CockroachClientCertificates } from '../resources/cockroachClientCertificates';
 import { CockroachCA } from '../resources/cockroachCA';
+import { getHandlerPath } from './lib';
 
 export class CockroachInitializeAdminUser extends Construct {
   public readonly secret: ISecret
@@ -32,8 +33,8 @@ export class CockroachInitializeAdminUser extends Construct {
         COCKROACH_ROOT_CRT_PARAM: options.rootCerts.clientCrt.parameterName,
         COCKROACH_ROOT_KEY_PARAM: options.rootCerts.clientKey.parameterName
       },
-      entry: join(__dirname, "..", "handlers", "cockroachInitializeAdminUserHandler.js"),
-      timeout: Duration.minutes(10)
+      entry: getHandlerPath("cockroachInitializeAdminUserHandler.js"),
+      timeout: Duration.minutes(10),
     })
 
     const initAdminProvider = new Provider(this, 'init-admin-provider', {

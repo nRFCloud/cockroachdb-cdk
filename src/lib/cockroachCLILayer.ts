@@ -1,6 +1,7 @@
 import { Architecture, Code, LayerVersion, Runtime } from '@aws-cdk/aws-lambda';
 import { Construct } from '@aws-cdk/core';
 import { join } from 'path';
+import { getContainerPath } from './lib';
 
 
 export class CockroachCLILayer extends LayerVersion {
@@ -8,9 +9,10 @@ export class CockroachCLILayer extends LayerVersion {
 
   constructor(scope: Construct, id: string) {
     if (CockroachCLILayer.buildCache == null) {
-      CockroachCLILayer.buildCache = Code.fromDockerBuild(join(__dirname, '..', '..', 'cockroach-cli-bundle'), {
+      CockroachCLILayer.buildCache = Code.fromDockerBuild(getContainerPath('cockroach-cli-bundle'), {
         imagePath: "build",
         platform: 'linux/amd64'
+
       });
     }
     super(scope, id, {

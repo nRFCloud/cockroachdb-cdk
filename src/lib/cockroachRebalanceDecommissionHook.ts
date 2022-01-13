@@ -10,6 +10,7 @@ import { Effect, PolicyStatement } from '@aws-cdk/aws-iam';
 import { Rule } from '@aws-cdk/aws-events';
 import { CloudWatchLogGroup, LambdaFunction } from '@aws-cdk/aws-events-targets';
 import { LogGroup } from '@aws-cdk/aws-logs';
+import { getHandlerPath } from './lib';
 
 export class CockroachRebalanceDecommissionHook extends Construct {
   constructor(scope: Construct, id: string,options: {
@@ -29,7 +30,7 @@ export class CockroachRebalanceDecommissionHook extends Construct {
       },
       memorySize: 4096,
       timeout: Duration.minutes(5),
-      entry: join(__dirname, '..', 'handlers', 'cockroachDecommissionHandler.js'),
+      entry: getHandlerPath('cockroachDecommissionHandler.js'),
       environment: {
         CLUSTER_NAME: 'cockroach',
         ECS_CLUSTER: cluster.clusterName,

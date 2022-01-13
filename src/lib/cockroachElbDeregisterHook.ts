@@ -9,6 +9,7 @@ import {NetworkTargetGroup} from '@aws-cdk/aws-elasticloadbalancingv2'
 import { CockroachCLILayer } from './cockroachCLILayer';
 import { CockroachCA } from '../resources/cockroachCA';
 import { CockroachClientCertificates } from '../resources/cockroachClientCertificates';
+import { getHandlerPath } from './lib';
 
 export class CockroachElbDeregisterHook extends Construct {
   constructor(scope: Construct, id: string, options: {
@@ -36,7 +37,7 @@ export class CockroachElbDeregisterHook extends Construct {
       },
       memorySize: 4096,
       timeout: Duration.minutes(1),
-      entry: join(__dirname, '..', 'handlers', 'cockroachDecommissionHandler.js'),
+      entry: getHandlerPath('cockroachDecommissionHandler.js'),
     })
 
     ca.caCrt.grantRead(deregisterTargetHandler);

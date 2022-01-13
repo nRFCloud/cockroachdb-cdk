@@ -1,6 +1,8 @@
 import { promisify } from 'util';
+import { join } from 'path';
+import { createHash } from 'crypto';
 
-const timeoutAsync = promisify((ms: number, cb: (err: any) => void) => setTimeout(cb, ms))
+export const timeoutAsync = promisify((ms: number, cb: (err: any) => void) => setTimeout(cb, ms))
 
 export async function retryWithBackoff<T>(func: (...args: any[]) => T, tries = 10, constantWait?: number): Promise<T> {
   let lastErr: Error = new Error();
@@ -17,4 +19,20 @@ export async function retryWithBackoff<T>(func: (...args: any[]) => T, tries = 1
     }
   }
   throw lastErr;
+}
+
+export const CONTAINER_PATH = join(__dirname, '..', '..', 'containers')
+
+export const HANDLER_PATH = join(__dirname, '..', 'handlers')
+
+export function getContainerPath(name: string) {
+  return join(CONTAINER_PATH, name)
+}
+
+export function getHandlerPath(name: string) {
+  return join(HANDLER_PATH, name)
+}
+
+export function hashString(string: string, chars = 6) {
+  return createHash('sha1').update(string).digest().toString('hex').substr(0, chars)
 }
