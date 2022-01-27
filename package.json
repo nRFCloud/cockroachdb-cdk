@@ -21,7 +21,7 @@
     "dist",
     "package.json",
     "containers",
-    "vendored",
+    "vendored"
   ],
   "scripts": {
     "compile": "tsc"
