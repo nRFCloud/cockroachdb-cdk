@@ -1,10 +1,15 @@
-import { App, CfnOutput, Stack } from '@aws-cdk/core';
+import { App, CfnOutput, Duration, RemovalPolicy, Stack } from '@aws-cdk/core';
 import { InstanceClass, InstanceSize, InstanceType, NatInstanceProvider, Vpc } from '@aws-cdk/aws-ec2';
-import { CockroachDBECS, DevelopmentInstanceRequirements } from '../cockroachDBECS';
+import {
+  BigProductionInstanceRequirements,
+  CockroachDBECS,
+  ProductionInstanceRequirements,
+  SmallProductionInstanceRequirements
+} from '../cockroachDBECS';
 import { KeyPair } from 'cdk-ec2-key-pair';
 import { GatewayVpcEndpointAwsService } from '@aws-cdk/aws-ec2/lib/vpc-endpoint';
-import { MachineImageType } from '@aws-cdk/aws-ecs';
 import { Bucket } from '@aws-cdk/aws-s3';
+import { MachineImageType } from '@aws-cdk/aws-ecs';
 
 export class TestStackECS extends Stack {
   constructor(parent: App) {
@@ -33,21 +38,34 @@ export class TestStackECS extends Stack {
     const cluster = new CockroachDBECS(this, 'cockroach-cluster', {
       vpc,
       onDemandNodes: 0,
-      nodes: 3,
-      defaultReplicationFactor: 3,
+      nodes: 6,
+      defaultReplicationFactor: 5,
       onDemandMetrics: false,
       enhancedMetrics: false,
       adminUsername: "nrfcloud",
-      instanceRequirements: DevelopmentInstanceRequirements
+      instanceRequirements: BigProductionInstanceRequirements,
+      publiclyAvailable: true,
+      instanceAmi: MachineImageType.AMAZON_LINUX_2
     })
 
-    const backupBucket = new Bucket(this, 'backup-bucket');
+    const backupBucket = new Bucket(this, 'backup-bucket', {
+      autoDeleteObjects: true,
+      removalPolicy: RemovalPolicy.DESTROY,
+      lifecycleRules: [
+        {
+          enabled: true,
+          expiration: Duration.days(5)
+        }
+      ]
+    });
 
     cluster.automateBackup(backupBucket, undefined)
 
     const db = cluster.addDatabase('db', 'nrfcloud')
 
     const user = db.addUser('user', 'lambda')
+
+    // cluster.configureBouncer(user);
 
     new CfnOutput(this, 'ca-crt-output', {
       exportName: 'caCrtParam',

@@ -36,7 +36,7 @@ export class CockroachStartupTerminationWaitHook extends Construct {
     }))
 
     const hook = asg.addLifecycleHook('cockroach-startup-wait-hook', {
-      heartbeatTimeout: Duration.minutes(15),
+      heartbeatTimeout: Duration.minutes(30),
       lifecycleTransition: LifecycleTransition.INSTANCE_LAUNCHING,
       defaultResult: DefaultResult.CONTINUE,
     })
@@ -51,7 +51,7 @@ export class CockroachStartupTerminationWaitHook extends Construct {
       },
       targets: [new LambdaFunction(waitHandler, {
         retryAttempts: 180,
-        maxEventAge: Duration.hours(1),
+        maxEventAge: Duration.hours(3),
       })]
     })
   }

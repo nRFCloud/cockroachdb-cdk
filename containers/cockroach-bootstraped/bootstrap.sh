@@ -61,7 +61,8 @@ echo "Will decommission node with flags:"
 echo "${DECOMMISSION_FLAGS[@]}"
 
 # Get storage drives
-AVAILABLE_DRIVES=$(ls -1a drives/*/available | sed 's/\/available$//')
+# Always include drive0 since we need *somewhere* to put stuff
+AVAILABLE_DRIVES=$((ls -1a drives/*/available || echo "drives/drive0/available") | sed 's/\/available$//')
 for DRIVE in $AVAILABLE_DRIVES; do
   echo "Adding store for drive: $DRIVE"
   args+=("--store=$DRIVE")

@@ -3,7 +3,7 @@
 # Exit immediately on failure
 set -ex
 
-if [[ "$BOTTLEROCKET" == true ]]; then
+if [[ "$BOTTLEROCKET_INSTANCE" == true ]]; then
   echo "Running in Bottlerocket container"
   DISK_BASE="/.bottlerocket/rootfs/dev"
   BASE_MOUNT_POINT="/.bottlerocket/rootfs/mnt"
@@ -26,18 +26,18 @@ for DRIVE in $INSTANCE_DRIVES; do
   DISK="$DISK_BASE/$DRIVE"
   PARTITION_CREATED="$PARTITION_CREATED_BASE/$DRIVE"
   if [ ! -f $PARTITION_CREATED ]; then
-    mkfs.ext4 -F $DISK
+    mkfs -t ext4 $DISK
     touch $PARTITION_CREATED
     echo "Partitioned ${DRIVE}"
   fi
   mkdir -p $MOUNT_PATH
 
-  if [[ "$BOTTLEROCKET" != true ]]; then
+  if [[ "$BOTTLEROCKET_INSTANCE" == true ]]; then
+      mount -o noatime,nodiratime,nobarrier $DISK $MOUNT_PATH
+  else
       FSTAB_LINE="$DISK   $MOUNT_PATH   ext4   defaults,noatime,nodiratime,nobarrier,errors=remount-ro   0   2"
       echo "$FSTAB_LINE" >> /etc/fstab
       mount $MOUNT_PATH
-  else
-      mount -o noatime,nodiratime,nobarrier $DISK $MOUNT_PATH
   fi
 
   touch $MOUNT_PATH/available

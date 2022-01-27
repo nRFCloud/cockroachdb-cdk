@@ -1,4 +1,4 @@
-import { Construct, CustomResource, Duration } from '@aws-cdk/core';
+import { Construct, CustomResource, Duration, Stack } from '@aws-cdk/core';
 import { Secret } from '@aws-cdk/aws-secretsmanager';
 import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs';
 import { join } from 'path';
@@ -47,7 +47,7 @@ export class CockroachDBSQLUser extends Construct {
       options: this.cluster.adminSecret.secretValueFromJson('options').toString()
     }
     // Username used in id to enforce safe naming scheme
-    this.secret = new Secret(this, 'user-secret-' + this.username, {
+    this.secret = new Secret(Stack.of(this), 'user-secret-' + this.username, {
       generateSecretString: {
         generateStringKey: 'password',
         passwordLength: 20,
@@ -58,7 +58,7 @@ export class CockroachDBSQLUser extends Construct {
 
     this.secret.grantRead(lambda);
 
-    new CustomResource(this, 'user-create-' + this.username, {
+    const user = new CustomResource(this, 'user-create-' + this.username, {
       serviceToken: this.provider.serviceToken,
       properties: {
         userSecretId: this.secret.secretArn,
@@ -66,5 +66,9 @@ export class CockroachDBSQLUser extends Construct {
         rootUserSecretId: this.cluster.adminSecret.secretArn
       }
     });
+
+    if (this.cluster.vpc) {
+      user.node.addDependency(this.cluster.vpc)
+    }
   }
 }

@@ -6,6 +6,7 @@ import {
   BottleRocketImage,
   CfnTaskDefinition,
   Cluster,
+  ContainerDependencyCondition,
   ContainerImage,
   DeploymentControllerType,
   Ec2Service,
@@ -16,10 +17,10 @@ import {
   LogDriver,
   MachineImageType,
   NetworkMode,
-  Protocol,
   Secret as ContainerSecret,
   TaskDefinition,
   UlimitName,
+  Protocol as ContainerProtocol
 } from '@aws-cdk/aws-ecs'
 import {
   CfnLaunchTemplate,
@@ -59,7 +60,7 @@ import { CockroachDecommissionHook } from './lib/cockroachDecommissionHook';
 import { CockroachTaskDrainHook } from './lib/cockroachTaskDrainHook';
 import { CockroachRebalanceDecommissionHook } from './lib/cockroachRebalanceDecommissionHook';
 import { CockroachElbDeregisterHook } from './lib/cockroachElbDeregisterHook';
-import { CockroachDatabase, CockroachDBCluster, CockroachDBSQLStatement } from './index';
+import { CockroachDatabase, CockroachDBCluster, CockroachDBSQLStatement, CockroachDBSQLUser } from './index';
 import { CockroachInitializeAdminUser } from './lib/cockroachInitializeAdminUser';
 import { ISecret } from '@aws-cdk/aws-secretsmanager';
 import { Bucket } from '@aws-cdk/aws-s3';
@@ -84,6 +85,9 @@ export class CockroachDBECS extends Construct implements CockroachDBCluster {
   public readonly adminSecret: ISecret;
   private readonly adminInit: CockroachInitializeAdminUser;
   private readonly cockroachTask: Ec2TaskDefinition;
+  private readonly lb: NetworkLoadBalancer;
+  private readonly cockroachService: Ec2Service;
+  private poolUser?: CockroachDBSQLUser;
 
   private addValidation(options: CockroachDBECSOptionsWithDefaults) {
     this.node.addValidation({
@@ -128,10 +132,10 @@ export class CockroachDBECS extends Construct implements CockroachDBCluster {
     )
 
     const capacity = this.addEc2SpotCapacity(this.cluster, this.options)
-    const nlb = new NetworkLoadBalancer(this, 'cockroach-lb', {
+    this.lb = new NetworkLoadBalancer(this, 'cockroach-lb', {
       vpc: this.cluster.vpc,
       crossZoneEnabled: true,
-      internetFacing: true,
+      internetFacing: this.options.publiclyAvailable,
     })
 
     this.nodeCerts = this.ca.createNodeCertificates(this.optionalUniqueCertId('cockroach-node-certs'), [
@@ -141,7 +145,7 @@ export class CockroachDBECS extends Construct implements CockroachDBCluster {
       'localhost',
       '*.compute.internal',
       `*.${Stack.of(this).region}.compute.internal`,
-      nlb.loadBalancerDnsName,
+      this.lb.loadBalancerDnsName,
     ])
 
     this.vpc = this.cluster.vpc;
@@ -149,11 +153,12 @@ export class CockroachDBECS extends Construct implements CockroachDBCluster {
     this.cockroachTask = this.configureTask(this.ca, this.nodeCerts, this.rootCerts);
     const {initTask, initWait} = this.runInitTask(this.cluster, this.ca, this.rootCerts);
     const service = this.configureService(this.cluster, capacity, this.cockroachTask);
+    this.cockroachService = service;
     this.configurePrometheusMetrics(this.cluster)
     service.node.addDependency(initTask, capacity);
-    this.configureLoadBalancerTargets(this.cluster, nlb, service)
+    this.configureLoadBalancerTargets(this.cluster, this.lb, service)
     this.handleInstanceTermination(this.cluster, service, capacity.autoScalingGroup, this.ca, this.rootCerts)
-    this.endpoint = nlb.loadBalancerDnsName;
+    this.endpoint = this.lb.loadBalancerDnsName;
 
     this.adminInit = new CockroachInitializeAdminUser(this, 'cockroach-admin-init', {
       vpc: this.cluster.vpc,
@@ -178,6 +183,79 @@ ALTER RANGE default CONFIGURE ZONE USING num_replicas = ${this.options.defaultRe
     )
   }
 
+  // public configureBouncer(poolUser: CockroachDBSQLUser) {
+  //   if (this.poolUser) {
+  //     throw new Error("Only a single pool user can be configured currently")
+  //   }
+  //   this.poolUser = poolUser;
+  //
+  //   const bouncerContainer = this.cockroachTask.addContainer('cockroach-bouncer', {
+  //     essential: false,
+  //     containerName: "pgbouncer-container",
+  //     image: ContainerImage.fromAsset(getContainerPath("cockroach-bouncer")),
+  //     secrets: {
+  //       CA_CRT: ContainerSecret.fromSsmParameter(this.ca.caCrt),
+  //       SERVER_CRT: ContainerSecret.fromSsmParameter(this.nodeCerts.nodeCrt),
+  //       SERVER_KEY: ContainerSecret.fromSsmParameter(this.nodeCerts.nodeKey),
+  //       POSTGRESQL_PASSWORD: ContainerSecret.fromSecretsManager(poolUser.secret, 'password')
+  //     },
+  //     environment: {
+  //       POSTGRESQL_HOST: "localhost",
+  //       POSTGRESQL_PORT: "26257",
+  //       POSTGRESQL_USERNAME: poolUser.username,
+  //       PGBOUNCER_PORT: "5432",
+  //       PGBOUNCER_IGNORE_STARTUP_PARAMETERS: "extra_float_digits",
+  //       PGBOUNCER_AUTH_TYPE: "plain",
+  //       PGBOUNCER_POOL_MODE: "transaction",
+  //       PGBOUNCER_DATABASE: "*",
+  //       PGBOUNCER_MAX_CLIENT_CONN: "100000"
+  //     },
+  //     logging: LogDriver.awsLogs({streamPrefix: "bouncer"}),
+  //     healthCheck: {
+  //       command: ["curl", "--fail", "http://localhost:8080/health?ready=1"],
+  //       startPeriod: Duration.seconds(300),
+  //       interval: Duration.seconds(5),
+  //       timeout: Duration.seconds(2),
+  //     },
+  //     portMappings: [{
+  //       containerPort: 5432,
+  //       hostPort: 5432,
+  //       protocol: ContainerProtocol.TCP
+  //     }],
+  //     memoryReservationMiB: 30
+  //   })
+  //
+  //   bouncerContainer.addUlimits({name: UlimitName.NOFILE, softLimit: 65536, hardLimit: 65536},)
+  //   bouncerContainer.addContainerDependencies({
+  //     container: this.cockroachTask.findContainer("cockroachdb-container")!,
+  //     condition: ContainerDependencyCondition.START
+  //   })
+  //
+  //   this.lb.addListener('pgbouncer-listener', {
+  //     port: 5432,
+  //     protocol: ELBProtocol.TCP
+  //   }).addTargets('pgbouncer-target', {
+  //     healthCheck: {
+  //       enabled: true,
+  //       port: "8080",
+  //       protocol: ELBProtocol.HTTP,
+  //       path: "/health?ready=1",
+  //       interval: Duration.seconds(10),
+  //       unhealthyThresholdCount: 2,
+  //       healthyThresholdCount: 2,
+  //     },
+  //     targets: [this.cockroachService.loadBalancerTarget({
+  //       containerName: "pgbouncer-container",
+  //       protocol: ContainerProtocol.TCP,
+  //       containerPort: 5432
+  //     })],
+  //     deregistrationDelay: Duration.minutes(0),
+  //     preserveClientIp: false,
+  //     port: 5432,
+  //     protocol: ELBProtocol.TCP,
+  //   })
+  // }
+
   public runSql(id: string, upQuery: string, downQuery?: string, database = "defaultdb", updateOnChange = false): CockroachDBSQLStatement {
     const statement = new CockroachDBSQLStatement(this, id, {
       cluster: this,
@@ -185,7 +263,7 @@ ALTER RANGE default CONFIGURE ZONE USING num_replicas = ${this.options.defaultRe
       database,
       updateOnChange
     })
-    statement.node.addDependency(this.adminInit);
+    statement.node.addDependency(this.adminInit, this.cockroachService);
     return statement;
   }
 
@@ -389,11 +467,11 @@ with schedule options first_run = 'now';`,
       containerName: "cockroachdb-container",
       logging: LogDriver.awsLogs({streamPrefix: "cockroach"}),
       memoryReservationMiB: 1024,
-      portMappings: [{containerPort: 8080, protocol: Protocol.TCP, hostPort: 8080}, {
+      portMappings: [{containerPort: 8080, protocol: ContainerProtocol.TCP, hostPort: 8080}, {
         containerPort: 26257,
-        protocol: Protocol.TCP,
+        protocol: ContainerProtocol.TCP,
         hostPort: 26257
-      }, {containerPort: 26258, protocol: Protocol.TCP, hostPort: 26258}],
+      }, {containerPort: 26258, protocol: ContainerProtocol.TCP, hostPort: 26258}],
       healthCheck: {
         command: ["curl", "--fail", "http://localhost:8080/health?ready=1"],
         startPeriod: Duration.seconds(300),
@@ -445,7 +523,7 @@ with schedule options first_run = 'now';`,
 
     const initWaitCondition = new CfnWaitCondition(this, 'init-wait', {
       count: 1,
-      timeout: Duration.minutes(15).toSeconds().toString(),
+      timeout: Duration.minutes(30).toSeconds().toString(),
       handle: waitConditionHandle.ref,
     })
 
@@ -513,7 +591,7 @@ with schedule options first_run = 'now';`,
       healthCheckGracePeriod: Duration.minutes(60),
     })
 
-    service.node.addDependency(capacityProvider)
+    service.node.addDependency(capacityProvider, cluster.vpc)
     return service;
   }
 
@@ -534,6 +612,7 @@ with schedule options first_run = 'now';`,
     serviceSG.addIngressRule(Peer.ipv4(cluster.vpc.vpcCidrBlock), Port.tcp(26257), 'cockroach-sql-access')
     serviceSG.addIngressRule(Peer.ipv4(cluster.vpc.vpcCidrBlock), Port.tcp(26258), 'cockroach-sql-access')
     serviceSG.addIngressRule(Peer.ipv4(cluster.vpc.vpcCidrBlock), Port.tcp(8080), 'cockroach-sql-access')
+    serviceSG.addIngressRule(Peer.ipv4(cluster.vpc.vpcCidrBlock), Port.tcp(5432), 'cockroach-sql-access')
 
     const bootstrapImage = new DockerImageAsset(this, 'bootstrap-image', {
       directory: getContainerPath('ephemeral-bootstrap')
@@ -544,7 +623,8 @@ with schedule options first_run = 'now';`,
       securityGroup: serviceSG,
       machineImage: (this.options.instanceAmi === MachineImageType.BOTTLEROCKET) ? new BottleRocketImage({cachedInContext: true}) : EcsOptimizedImage.amazonLinux2(AmiHardwareType.STANDARD),
       updatePolicy: UpdatePolicy.rollingUpdate({
-        minInstancesInService: options.nodes,
+        minInstancesInService: options.nodes - 1,
+        maxBatchSize: Math.max(Math.floor(options.nodes / 3), 1),
         waitOnResourceSignals: this.options.instanceAmi === MachineImageType.AMAZON_LINUX_2,
       }),
       instanceType: InstanceType.of(InstanceClass.C5AD, InstanceSize.XLARGE),
@@ -556,7 +636,7 @@ with schedule options first_run = 'now';`,
       // healthCheck: HealthCheck.elb({
       //   grace: Duration.minutes(5)
       // })
-      maxCapacity: options.nodes + 1,
+      maxCapacity: options.nodes,
       ...((this.options.instanceAmi === MachineImageType.AMAZON_LINUX_2) ? {
         init: CloudFormationInit.fromConfig(amazonLinuxInit),
         initOptions: {
@@ -611,6 +691,7 @@ with schedule options first_run = 'now';`,
         'essential = false'
       )
     }
+
 
     const cfnAsg = asg.node.defaultChild as CfnAutoScalingGroup;
 
@@ -784,38 +865,49 @@ export interface CockroachDBECSOptions {
    * @default 3
    */
   nodes?: number
+
   /**
    * VPC placement. Must include private subnets with internet access.
    */
   vpc?: Vpc,
+
   /**
    * CockroachDB docker image to use
    * @default cockroachdb/cockroach:v21.2.2
    */
   cockroachImage?: string;
+
   /**
    * Rotate node and root certificates on every deployment. Will trigger a rolling update every time, so be ready to wait.
    * Turning this on/off also triggers a deployment
    * @default false
    */
   rotateCertsOnDeployment?: boolean;
+
   /**
    * Enables enhanced metrics for the cluster. Extra charges will apply for additional custom metrics, and a (small) additional container to run the cloudwatch agent.
+   * @default true
    */
   enhancedMetrics?: boolean
+
   /**
    * Run a minimum number of on demand instances. Recommend at least 2 for high availability
    * @default 2
    */
   onDemandNodes?: number;
+
   /**
    * Percentage of on demand instances to run above base on demand capacity
+   * @default 0
    */
   onDemandRatio?: number;
+
   /**
    * Run metrics agent with on demand capacity. This is more expensive, but will guarantee metric availability
+   * @default true
    */
   onDemandMetrics?: boolean;
+
   /**
    * Username for the created admin user
    */
@@ -825,17 +917,21 @@ export interface CockroachDBECSOptions {
    * Give cluster read access to S3 buckets
    */
   importBuckets?: Bucket[],
+
   /**
    * Give cluster write access to S3 buckets
    */
   exportBuckets?: Bucket[],
+
   /**
    * The default replica count for the cluster. Should be an odd number less than or equal to your node count
+   * @default 3
    */
   defaultReplicationFactor?: number
 
   /**
    * Sets the AMI deployed to ECS instances. Probably just leave this set to BOTTLEROCKET
+   * @default MachineImageType.BOTTLEROCKET
    */
   instanceAmi?: MachineImageType
 
@@ -846,9 +942,17 @@ export interface CockroachDBECSOptions {
 
   /**
    * Rate at which ranges will rebalance within the cluster.
-   * Only really needs to be changed when using burstable instances.
+   * Only really needs to be changed when using limited burstable instances.
+   * @default "256 MB"
    */
   rebalanceRate?: '256 MB' | '128 MB' | '64 MB' | '32 MB' | '16 MB'
+
+  /**
+   * Whether the loadbalancer should be publicly available.
+   * This should be false in production deployments.
+   * @default false
+   */
+  publiclyAvailable?: boolean
 }
 
 type CockroachDBECSOptionsWithDefaults =
@@ -870,7 +974,7 @@ export const ProductionInstanceRequirements: InstanceRequirementsProperty = {
     max: 32 * 1024
   },
   acceleratorCount: {max: 0},
-  totalLocalStorageGb: {min: 60, max: 200},
+  totalLocalStorageGb: {min: 60, max: 300},
   localStorageTypes: ["ssd"],
   cpuManufacturers: ["intel", 'amd'],
   burstablePerformance: 'excluded',
@@ -878,6 +982,51 @@ export const ProductionInstanceRequirements: InstanceRequirementsProperty = {
   bareMetal: "excluded",
 }
 
+export const SmallProductionInstanceRequirements: InstanceRequirementsProperty = {
+  instanceGenerations: ["current"],
+  vCpuCount: {
+    max: 2,
+    min: 2
+  },
+  memoryGiBPerVCpu: {
+    min: 2,
+    max: 8
+  },
+  memoryMiB: {
+    min: 8 * 1024,
+    max: 16 * 1024
+  },
+  acceleratorCount: {max: 0},
+  totalLocalStorageGb: {min: 60, max: 300},
+  localStorageTypes: ["ssd"],
+  cpuManufacturers: ["intel", 'amd'],
+  burstablePerformance: 'excluded',
+  localStorage: 'required',
+  bareMetal: "excluded",
+}
+
+export const BigProductionInstanceRequirements: InstanceRequirementsProperty = {
+  instanceGenerations: ["current"],
+  vCpuCount: {
+    max: 8,
+    min: 8
+  },
+  memoryGiBPerVCpu: {
+    min: 2,
+    max: 8
+  },
+  memoryMiB: {
+    min: 16 * 1024,
+    max: 64 * 1024
+  },
+  acceleratorCount: {max: 0},
+  totalLocalStorageGb: {min: 60, max: 500},
+  localStorageTypes: ["ssd"],
+  cpuManufacturers: ["intel", 'amd'],
+  burstablePerformance: 'excluded',
+  localStorage: 'required',
+  bareMetal: "excluded",
+}
 export const DevelopmentInstanceRequirements: InstanceRequirementsProperty = {
   cpuManufacturers: ["intel", 'amd'],
   burstablePerformance: 'required',
@@ -904,7 +1053,8 @@ const CockroachDBECSOptionsDefaults = {
   exportBuckets: [] as Bucket[],
   defaultReplicationFactor: 3,
   onDemandRatio: 0,
-  instanceAmi: MachineImageType.BOTTLEROCKET,
+  instanceAmi: MachineImageType.AMAZON_LINUX_2,
   instanceRequirements: ProductionInstanceRequirements,
-  rebalanceRate: '256 MB'
+  rebalanceRate: '256 MB',
+  publiclyAvailable: false,
 }

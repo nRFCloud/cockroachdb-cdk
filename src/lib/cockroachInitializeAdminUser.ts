@@ -1,4 +1,4 @@
-import { Construct, CustomResource, Duration } from '@aws-cdk/core';
+import { Construct, CustomResource, Duration, Stack } from '@aws-cdk/core';
 import { ISecret, Secret } from '@aws-cdk/aws-secretsmanager';
 import { CockroachDBUserSecret } from './types';
 import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs';
@@ -48,7 +48,7 @@ export class CockroachInitializeAdminUser extends Construct {
       port: 26257,
       options: ""
     }
-    const secret = new Secret(this, `root-user-secret`, {
+    const secret = new Secret(Stack.of(this), `cockroach-root-user-secret`, {
       generateSecretString: {
         generateStringKey: 'password',
         excludePunctuation: true,
@@ -68,7 +68,7 @@ export class CockroachInitializeAdminUser extends Construct {
       properties: {
         userSecretId: secret.secretArn
       }
-    })
+    }).node.addDependency(options.vpc)
 
     this.secret = secret;
   }

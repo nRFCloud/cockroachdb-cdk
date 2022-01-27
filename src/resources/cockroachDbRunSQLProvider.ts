@@ -43,7 +43,7 @@ export class CockroachDBSQLStatement extends Construct {
       resourceId += hashString(options.upQuery)
     }
 
-    new CustomResource(this, resourceId, {
+    const sql = new CustomResource(this, resourceId, {
       serviceToken: this.provider.serviceToken,
       properties: {
         database: this.database,
@@ -52,5 +52,9 @@ export class CockroachDBSQLStatement extends Construct {
         rootUserSecretId: this.cluster.adminSecret.secretArn
       },
     })
+
+    if (this.cluster.vpc) {
+      sql.node.addDependency(this.cluster.vpc)
+    }
   }
 }
