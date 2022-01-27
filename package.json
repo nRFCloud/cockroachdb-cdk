@@ -19,13 +19,15 @@
   },
   "files": [
     "dist",
-    "package.json"
+    "package.json",
+    "containers",
+    "vendored",
   ],
   "scripts": {
     "compile": "tsc"
   },
   "name": "cockroach-cdk",
-  "version": "0.0.6",
+  "version": "0.0.8",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
   "license": "MIT",
