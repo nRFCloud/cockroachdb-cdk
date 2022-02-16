@@ -51,7 +51,7 @@ import { Effect, ManagedPolicy, Policy, PolicyStatement } from '@aws-cdk/aws-iam
 import {
   AutoScalingGroup,
   CfnAutoScalingGroup,
-  CfnLaunchConfiguration,
+  CfnLaunchConfiguration, GroupMetrics,
   HealthCheck,
   Signals,
   UpdatePolicy
@@ -69,6 +69,7 @@ import { CockroachStartupTerminationWaitHook } from './lib/cockroachStartupTermi
 import { DockerImageAsset } from '@aws-cdk/aws-ecr-assets';
 import { CONTAINER_PATH, getContainerPath } from './lib/lib';
 import InstanceRequirementsProperty = CfnAutoScalingGroup.InstanceRequirementsProperty;
+import { PoolerService } from './lib/poolerService';
 
 export class CockroachDBECS extends Construct implements CockroachDBCluster {
   private readonly internalBaseDomain = 'cockroach.db.crdb.com'
@@ -87,7 +88,6 @@ export class CockroachDBECS extends Construct implements CockroachDBCluster {
   private readonly cockroachTask: Ec2TaskDefinition;
   private readonly lb: NetworkLoadBalancer;
   private readonly cockroachService: Ec2Service;
-  private poolUser?: CockroachDBSQLUser;
 
   private addValidation(options: CockroachDBECSOptionsWithDefaults) {
     this.node.addValidation({
@@ -183,78 +183,27 @@ ALTER RANGE default CONFIGURE ZONE USING num_replicas = ${this.options.defaultRe
     )
   }
 
-  // public configureBouncer(poolUser: CockroachDBSQLUser) {
-  //   if (this.poolUser) {
-  //     throw new Error("Only a single pool user can be configured currently")
-  //   }
-  //   this.poolUser = poolUser;
-  //
-  //   const bouncerContainer = this.cockroachTask.addContainer('cockroach-bouncer', {
-  //     essential: false,
-  //     containerName: "pgbouncer-container",
-  //     image: ContainerImage.fromAsset(getContainerPath("cockroach-bouncer")),
-  //     secrets: {
-  //       CA_CRT: ContainerSecret.fromSsmParameter(this.ca.caCrt),
-  //       SERVER_CRT: ContainerSecret.fromSsmParameter(this.nodeCerts.nodeCrt),
-  //       SERVER_KEY: ContainerSecret.fromSsmParameter(this.nodeCerts.nodeKey),
-  //       POSTGRESQL_PASSWORD: ContainerSecret.fromSecretsManager(poolUser.secret, 'password')
-  //     },
-  //     environment: {
-  //       POSTGRESQL_HOST: "localhost",
-  //       POSTGRESQL_PORT: "26257",
-  //       POSTGRESQL_USERNAME: poolUser.username,
-  //       PGBOUNCER_PORT: "5432",
-  //       PGBOUNCER_IGNORE_STARTUP_PARAMETERS: "extra_float_digits",
-  //       PGBOUNCER_AUTH_TYPE: "plain",
-  //       PGBOUNCER_POOL_MODE: "transaction",
-  //       PGBOUNCER_DATABASE: "*",
-  //       PGBOUNCER_MAX_CLIENT_CONN: "100000"
-  //     },
-  //     logging: LogDriver.awsLogs({streamPrefix: "bouncer"}),
-  //     healthCheck: {
-  //       command: ["curl", "--fail", "http://localhost:8080/health?ready=1"],
-  //       startPeriod: Duration.seconds(300),
-  //       interval: Duration.seconds(5),
-  //       timeout: Duration.seconds(2),
-  //     },
-  //     portMappings: [{
-  //       containerPort: 5432,
-  //       hostPort: 5432,
-  //       protocol: ContainerProtocol.TCP
-  //     }],
-  //     memoryReservationMiB: 30
-  //   })
-  //
-  //   bouncerContainer.addUlimits({name: UlimitName.NOFILE, softLimit: 65536, hardLimit: 65536},)
-  //   bouncerContainer.addContainerDependencies({
-  //     container: this.cockroachTask.findContainer("cockroachdb-container")!,
-  //     condition: ContainerDependencyCondition.START
-  //   })
-  //
-  //   this.lb.addListener('pgbouncer-listener', {
-  //     port: 5432,
-  //     protocol: ELBProtocol.TCP
-  //   }).addTargets('pgbouncer-target', {
-  //     healthCheck: {
-  //       enabled: true,
-  //       port: "8080",
-  //       protocol: ELBProtocol.HTTP,
-  //       path: "/health?ready=1",
-  //       interval: Duration.seconds(10),
-  //       unhealthyThresholdCount: 2,
-  //       healthyThresholdCount: 2,
-  //     },
-  //     targets: [this.cockroachService.loadBalancerTarget({
-  //       containerName: "pgbouncer-container",
-  //       protocol: ContainerProtocol.TCP,
-  //       containerPort: 5432
-  //     })],
-  //     deregistrationDelay: Duration.minutes(0),
-  //     preserveClientIp: false,
-  //     port: 5432,
-  //     protocol: ELBProtocol.TCP,
-  //   })
-  // }
+  public addPooler(id: string, options?: {instances?: number, poolSize?: number, cpu?: number, onDemand?: boolean}) {
+    const defaulted = {
+      instances: 2,
+      // Assume 4 vcpu per node
+      poolSize: this.options.nodes * 4 * 4,
+      cpu: 1024,
+      onDemand: false,
+      ...options
+    }
+    return new PoolerService(this, id, {
+      nlb: this.lb,
+      endpoint: this.endpoint,
+      ca: this.ca,
+      nodeCerts: this.nodeCerts,
+      cluster: this.cluster,
+      instances: defaulted.instances,
+      poolSize: defaulted.poolSize,
+      cpu: defaulted.cpu,
+      onDemand: defaulted.onDemand,
+    })
+  }
 
   public runSql(id: string, upQuery: string, downQuery?: string, database = "defaultdb", updateOnChange = false): CockroachDBSQLStatement {
     const statement = new CockroachDBSQLStatement(this, id, {
@@ -612,7 +561,7 @@ with schedule options first_run = 'now';`,
     serviceSG.addIngressRule(Peer.ipv4(cluster.vpc.vpcCidrBlock), Port.tcp(26257), 'cockroach-sql-access')
     serviceSG.addIngressRule(Peer.ipv4(cluster.vpc.vpcCidrBlock), Port.tcp(26258), 'cockroach-sql-access')
     serviceSG.addIngressRule(Peer.ipv4(cluster.vpc.vpcCidrBlock), Port.tcp(8080), 'cockroach-sql-access')
-    serviceSG.addIngressRule(Peer.ipv4(cluster.vpc.vpcCidrBlock), Port.tcp(5432), 'cockroach-sql-access')
+    serviceSG.addIngressRule(Peer.ipv4(cluster.vpc.vpcCidrBlock), Port.tcp(26256), 'cockroach-sql-access')
 
     const bootstrapImage = new DockerImageAsset(this, 'bootstrap-image', {
       directory: getContainerPath('ephemeral-bootstrap')
@@ -636,6 +585,7 @@ with schedule options first_run = 'now';`,
       // healthCheck: HealthCheck.elb({
       //   grace: Duration.minutes(5)
       // })
+      groupMetrics: [GroupMetrics.all()],
       maxCapacity: options.nodes,
       ...((this.options.instanceAmi === MachineImageType.AMAZON_LINUX_2) ? {
         init: CloudFormationInit.fromConfig(amazonLinuxInit),
@@ -694,7 +644,7 @@ with schedule options first_run = 'now';`,
 
 
     const cfnAsg = asg.node.defaultChild as CfnAutoScalingGroup;
-
+    cfnAsg.tags.setTag("Service", "cockroachdb", undefined, true)
     const cfnLaunchConfig = asg.node.tryFindChild('LaunchConfig') as CfnLaunchConfiguration;
     asg.node.tryRemoveChild('LaunchConfig');
     cfnAsg.instanceId = undefined;

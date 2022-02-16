@@ -1,20 +1,31 @@
 #!/usr/bin/env bash
 
-export PGBOUNCER_CLIENT_TLS_SSLMODE=require
-export PGBOUNCER_CLIENT_TLS_CA_FILE=/certs/ca.crt
-export PGBOUNCER_CLIENT_TLS_CERT_FILE=/certs/server.crt
-export PGBOUNCER_CLIENT_TLS_KEY_FILE=/certs/server.key
-export PGBOUNCER_SERVER_TLS_CA_FILE=/certs/ca.crt
+export PG_USER_root="password"
 
-CORE_COUNT=$(getconf _NPROCESSORS_ONLN)
-MAX_DB_CON=$((CORE_COUNT * 4))
+export PG_HOST=${PG_HOST:=localhost}
+export PG_PORT=${PG_PORT:=26257}
+export PG_POOL_SIZE=${PG_POOL_SIZE:=100}
+export PGB_PORT=${PGB_PORT:=5432}
+export PGB_VERBOSITY=${PGB_VERBOSITY:=0}
+export PGB_MAX_CLIENT_CONN=${PGB_MAX_CLIENT_CONN:=999999}
 
-export PGBOUNCER_MAX_DB_CONNECTIONS=$MAX_DB_CON
-export PGBOUNCER_DEFAULT_POOL_SIZE=$MAX_DB_CON
-export PGBOUNCER_MIN_POOL_SIZE=$MAX_DB_CON
+mkdir certs
+echo "$CA_CRT" > certs/ca.crt
+echo "$SERVER_CRT" > certs/server.crt
+echo "$SERVER_KEY" > certs/server.key
 
-echo "$CA_CRT" > $PGBOUNCER_CLIENT_TLS_CA_FILE
-echo "$SERVER_CRT" > $PGBOUNCER_CLIENT_TLS_CERT_FILE
-echo "$SERVER_KEY" > $PGBOUNCER_CLIENT_TLS_KEY_FILE
+envsubst < pgbouncer.temp.ini > pgbouncer.ini
 
-exec "/opt/bitnami/scripts/pgbouncer/entrypoint.sh" "/opt/bitnami/scripts/pgbouncer/run.sh"
+# Configure users
+newline=$'\n'
+pg_users=${!PG_USER_@}
+userfile=$""
+for i in $pg_users; do
+  username=${i#"PG_USER_"}
+  password=${!i}
+  userfile+=$"\"$username\" \"${password}\"$newline"
+done
+
+echo "$userfile" > userfile.txt
+
+exec ./pgbouncer pgbouncer.ini

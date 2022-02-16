@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { promisify } from 'util';
@@ -11,18 +11,29 @@ const certDir = process.argv[3] || "certs"
 
 async function main() {
   const pool = new Pool({
-    host,
-    port: 26257,
+    // host,
+    // port: 26257,
+    // ssl: {
+    //   ca: readFileSync(join(certDir, "ca.crt")),
+    //   key: readFileSync(join(certDir, "client.root.key")),
+    //   cert: readFileSync(join(certDir, "client.root.crt"))
+    // },
+    // user: 'root',
+    // database: 'defaultdb',
     ssl: {
-      ca: readFileSync(join(certDir, "ca.crt")),
-      key: readFileSync(join(certDir, "client.root.key")),
-      cert: readFileSync(join(certDir, "client.root.crt"))
+     rejectUnauthorized: false,
     },
-    user: 'root',
-    database: 'defaultdb',
-    connectionTimeoutMillis: 1000,
-    max: 9,
-    min: 9,
+    port: 26256,
+    password: 'cN\\o$w2a!>)Yt|zG4}f;',
+    user: 'lambda',
+    database: 'nrfcloud',
+    host,
+    max: 3,
+    min: 3,
+    // @ts-ignore
+    // verify: (client: PoolClient, callback: (err?: Error) => void) => {
+    //   client.query('select arstoaiernst;', callback)
+    // },
     keepAlive: true,
     keepAliveInitialDelayMillis: 0
   })
@@ -30,23 +41,22 @@ async function main() {
   pool.on('error', err => console.error("Error event"))
 
   while (true) {
-    console.log("checking connected nodes")
+    // console.log("checking connected nodes")
     const promises = [];
     const clients: any[] = [];
-    let count = 9;
+    let count = 3;
     while (count--) {
       // const client = await pool.connect();
-      promises.push(retryOnShutdown(() => pool.query(`select build.node_id, advertise_sql_address as address
-                                                from crdb_internal.gossip_nodes
-                                                       inner join crdb_internal.node_build_info as build
-                                                                  on build.node_id = crdb_internal.gossip_nodes.node_id limit 1`)));
+      promises.push(pool.query(`show node_id;`));
     }
     const result = await Promise.allSettled(promises)
-    console.log(`Idle: ${pool.idleCount} Waiting: ${pool.waitingCount} Total: ${pool.totalCount}`)
+    // console.log(`Idle: ${pool.idleCount} Waiting: ${pool.waitingCount} Total: ${pool.totalCount}`)
     result.forEach(result => {
       if (result.status === "fulfilled") {
-        console.log('Connected to Node: ' + JSON.stringify(result.value.rows[0]))
+        // console.log('Connected to Node: ' + JSON.stringify(result.value.rows[0]))
       } else {
+        console.log(`Idle: ${pool.idleCount} Waiting: ${pool.waitingCount} Total: ${pool.totalCount}`)
+        console.error("Failed to run query")
         console.error(result.reason)
       }
     })

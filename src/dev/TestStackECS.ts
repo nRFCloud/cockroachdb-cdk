@@ -2,7 +2,7 @@ import { App, CfnOutput, Duration, RemovalPolicy, Stack } from '@aws-cdk/core';
 import { InstanceClass, InstanceSize, InstanceType, NatInstanceProvider, Vpc } from '@aws-cdk/aws-ec2';
 import {
   BigProductionInstanceRequirements,
-  CockroachDBECS,
+  CockroachDBECS, DevelopmentInstanceRequirements,
   ProductionInstanceRequirements,
   SmallProductionInstanceRequirements
 } from '../cockroachDBECS';
@@ -38,14 +38,15 @@ export class TestStackECS extends Stack {
     const cluster = new CockroachDBECS(this, 'cockroach-cluster', {
       vpc,
       onDemandNodes: 0,
-      nodes: 6,
-      defaultReplicationFactor: 5,
+      nodes: 3,
+      defaultReplicationFactor: 3,
       onDemandMetrics: false,
       enhancedMetrics: false,
       adminUsername: "nrfcloud",
-      instanceRequirements: BigProductionInstanceRequirements,
+      instanceRequirements: DevelopmentInstanceRequirements,
       publiclyAvailable: true,
-      instanceAmi: MachineImageType.AMAZON_LINUX_2
+      instanceAmi: MachineImageType.AMAZON_LINUX_2,
+      cockroachImage: 'public.ecr.aws/v2w0t0k6/cockroachdb-test/cockroach-master:latest'
     })
 
     const backupBucket = new Bucket(this, 'backup-bucket', {
@@ -64,6 +65,12 @@ export class TestStackECS extends Stack {
     const db = cluster.addDatabase('db', 'nrfcloud')
 
     const user = db.addUser('user', 'lambda')
+
+    const pool = cluster.addPooler('pooler', {
+      onDemand: false
+    })
+
+    pool.addUser(user)
 
     // cluster.configureBouncer(user);
 
